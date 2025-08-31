@@ -1,0 +1,45 @@
+{
+  "manifest_version": 2,
+  "name": "AI Mate",
+  "author": "Enrique Serrano Aparicio",
+  "homepage_url": "https://github.com/EnriqueITE/AI-Mate",
+  "version": "1.0.0",
+  "description": "Adds a compose button to generate an email reply using OpenAI. Includes settings for API key.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ai-mate@enriqueite.com",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "compose",
+    "tabs",
+    "notifications",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "icons": {
+    "48": "Logo.png",
+    "96": "Logo.png",
+    "128": "Logo.png"
+  },
+  
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "compose_action": {
+    "default_title": "AI Mate Reply",
+    "default_popup": "popup.html",
+    "default_area": "maintoolbar",
+    "default_icon": {
+      "16": "Logo.png",
+      "24": "Logo.png",
+      "32": "Logo.png"
+    }
+  }
+}

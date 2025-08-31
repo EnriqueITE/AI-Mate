@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Reply</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>AI Mate Reply</h1>
+      <div id="warning" class="status"></div>
+      <label for="prompt">Optional instruction</label>
+      <textarea id="prompt" rows="5" placeholder="e.g., Be friendly and concise; propose times next week."></textarea>
+      <div class="actions">
+        <button id="generate">
+          <span id="genSpinner" class="spinner" style="display:none"></span>
+          <span>Generate Reply</span>
+        </button>
+        <button id="openOptions">Open Settings</button>
+      </div>
+      <div id="status" class="status" role="status"></div>
+      <div class="link-row">
+        <span class="hint">Tip: Enter generates • Shift+Enter inserts a newline.</span>
+      </div>
+      <div class="meta">
+        <a href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+  </html>
