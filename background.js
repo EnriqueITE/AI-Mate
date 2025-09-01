@@ -41,9 +41,9 @@ async function notify(title, message) {
 
 function stripHtml(html) {
   try {
-    const tmp = document.implementation.createHTMLDocument("");
-    tmp.body.innerHTML = html || "";
-    return tmp.body.textContent || "";
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html || "", "text/html");
+    return doc.body.textContent || "";
   } catch (e) {
     // Fallback simple stripper
     return (html || "").replace(/<[^>]+>/g, "");
@@ -51,6 +51,7 @@ function stripHtml(html) {
 }
 
 function textToHtml(text) {
+  // Retained for string-based fallback path only.
   const esc = (s) => s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -60,6 +61,21 @@ function textToHtml(text) {
     .replace(/\r\n/g, "\n")
     .replace(/^\s+|\s+$/g, "");
   return `<span data-ai-reply-text style="display:block;margin:0;padding:0;">${esc(cleaned).replace(/\n/g, "<br>")}</span>`;
+}
+
+function createReplySpan(ownerDoc, text) {
+  const span = ownerDoc.createElement("span");
+  span.setAttribute("data-ai-reply-text", "");
+  span.style.display = "block";
+  span.style.margin = "0";
+  span.style.padding = "0";
+  const cleaned = String(text || "").replace(/\r\n/g, "\n").trim();
+  const parts = cleaned.split("\n");
+  parts.forEach((line, idx) => {
+    span.appendChild(ownerDoc.createTextNode(line));
+    if (idx < parts.length - 1) span.appendChild(ownerDoc.createElement("br"));
+  });
+  return span;
 }
 
 async function getActiveComposeTabId() {
@@ -182,12 +198,13 @@ async function generateReplyForCompose(tabId, userPrompt) {
     const replyHtml = textToHtml(content);
     const original = details.body || "";
     try {
-      const doc = document.implementation.createHTMLDocument("");
-      doc.body.innerHTML = original;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(original, "text/html");
       const container = doc.createElement("div");
       container.setAttribute("data-ai-reply", "true");
       container.style.margin = "0";
-      container.innerHTML = replyHtml; // no extra <br>
+      // Append reply content safely without assigning innerHTML
+      container.appendChild(createReplySpan(doc, content));
       // In reply mode Thunderbird usually wraps the quote in blockquote[type=cite]
       // and the signature in .moz-signature
       const signature = doc.querySelector(".moz-signature, #moz-signature, pre.moz-signature, span.moz-signature");
