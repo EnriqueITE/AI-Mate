@@ -20,5 +20,5 @@ Permissions Justification
 - `https://api.openai.com/*`: Call the OpenAI API.
 
 Contact
-- For questions or removal requests, disable or remove the add‑on from Thunderbird Add‑ons Manager.
-
+- Email: hello@enriqueite.com
+- You can disable or remove the add‑on anytime from Thunderbird Add‑ons Manager.
