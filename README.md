@@ -1,12 +1,5 @@
 AI Mate - Thunderbird Add-on
-
- █████╗ ██╗    ███╗   ███╗ █████╗ ████████╗███████╗
-██╔══██╗██║    ████╗ ████║██╔══██╗╚══██╔══╝██╔════╝
-███████║██║    ██╔████╔██║███████║   ██║   █████╗  
-██╔══██║██║    ██║╚██╔╝██║██╔══██║   ██║   ██╔══╝  
-██║  ██║██║    ██║ ╚═╝ ██║██║  ██║   ██║   ███████╗
-╚═╝  ╚═╝╚═╝    ╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝
-                                                   
+                                                 
 Repository: https://github.com/EnriqueITE/AI-Mate
 Author: Enrique Serrano Aparicio (https://x.com/EnriqueITE | https://buymeacoffee.com/enriqueite)
 
