@@ -3,10 +3,12 @@ const api = typeof browser !== 'undefined' ? browser : (typeof messenger !== 'un
 
 async function load() {
   if (!api) return;
-  const { openaiApiKey, openaiModel, lastPrompt, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty } = await api.storage.local.get({
+  const { openaiApiKey, openaiModel, lastPrompt, summaryLanguage, summaryStyle, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty } = await api.storage.local.get({
     openaiApiKey: "",
     openaiModel: "gpt-4o-mini",
     lastPrompt: "",
+    summaryLanguage: "auto",
+    summaryStyle: "balanced",
     openaiTemperature: 0.7,
     openaiTopP: 1,
     openaiMaxTokens: null,
@@ -16,6 +18,10 @@ async function load() {
   document.getElementById("apiKey").value = openaiApiKey || "";
   document.getElementById("model").value = openaiModel || "gpt-4o-mini";
   document.getElementById("defaultPrompt").value = lastPrompt || "";
+  const langEl = document.getElementById("summaryLanguage");
+  if (langEl) langEl.value = (summaryLanguage || "auto");
+  const styleEl = document.getElementById("summaryStyle");
+  if (styleEl) styleEl.value = (summaryStyle || "balanced");
   document.getElementById("temperature").value = (openaiTemperature ?? 0.7);
   document.getElementById("topP").value = (openaiTopP ?? 1);
   document.getElementById("maxTokens").value = (openaiMaxTokens ?? "");
@@ -41,6 +47,8 @@ async function save() {
       openaiApiKey: apiKey,
       openaiModel: model,
       lastPrompt,
+      summaryLanguage: (document.getElementById("summaryLanguage") && document.getElementById("summaryLanguage").value) || "auto",
+      summaryStyle: (document.getElementById("summaryStyle") && document.getElementById("summaryStyle").value) || "balanced",
       openaiTemperature: isFinite(temperature) ? temperature : 0.7,
       openaiTopP: isFinite(topP) ? topP : 1,
       openaiMaxTokens: (maxTokens !== null && isFinite(maxTokens)) ? maxTokens : null,

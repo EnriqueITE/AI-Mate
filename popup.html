@@ -16,9 +16,20 @@
           <span id="genSpinner" class="spinner" style="display:none"></span>
           <span>Generate Reply</span>
         </button>
-        <button id="openOptions">Open Settings</button>
+        <button id="summarize" class="btn-outlined">
+          <span id="sumSpinner" class="spinner" style="display:none"></span>
+          <span>Summarize Email</span>
+        </button>
+        <button id="openOptions" class="btn-outlined">Open Settings</button>
       </div>
       <div id="status" class="status" role="status"></div>
+      <div id="summarySection" class="summary-section" hidden>
+        <div class="summary-header">
+          <span class="summary-title">Email summary</span>
+          <button id="clearSummary" class="btn-link" type="button">Clear summary</button>
+        </div>
+        <div id="summary" class="summary" role="region" aria-live="polite"></div>
+      </div>
       <div class="link-row">
         <span class="hint">Tip: Enter generates • Shift+Enter inserts a newline.</span>
       </div>
@@ -29,3 +40,4 @@
     <script src="popup.js"></script>
   </body>
   </html>
+

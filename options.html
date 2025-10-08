@@ -68,6 +68,39 @@
         <div class="hint">Used when clicking the toolbar button (no popup). You can change it here anytime.</div>
       </div>
 
+      <div class="field">
+        <label for="summaryLanguage">Summary language</label>
+        <div style="display:flex; gap:8px; align-items:center; max-width:320px;">
+          <select id="summaryLanguage">
+            <option value="auto">Auto (detect)</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="pt">Português</option>
+            <option value="it">Italiano</option>
+            <option value="nl">Nederlands</option>
+            <option value="ja">日本語</option>
+            <option value="zh">中文 (简体)</option>
+            <option value="ru">Русский</option>
+            <option value="ar">العربية</option>
+          </select>
+        </div>
+        <div class="hint">Choose the language the summary should be written in. If set to Auto, the add-on will try to detect the message language. Your Default Prompt will also be taken into account when creating summaries.</div>
+      </div>
+      <div class="field">
+        <label for="summaryStyle">Summary style</label>
+        <div style="display:flex; gap:8px; align-items:center; max-width:320px;">
+          <select id="summaryStyle">
+            <option value="balanced">Balanced (default)</option>
+            <option value="concise">Concise / short</option>
+            <option value="detailed">Detailed / long</option>
+            <option value="outline">Outline / schematic</option>
+          </select>
+        </div>
+        <div class="hint">Controls the tone and length of generated summaries.</div>
+      </div>
+
       <div class="actions">
         <button id="save">
           <span class="btn-icon" aria-hidden="true">

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Mate Summary</title>
+    <link rel="stylesheet" href="reader-popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>AI Mate Summary</h1>
+      <div id="status" class="status" role="status"></div>
+      <div class="actions">
+        <button id="summarize">
+          <span id="sumSpinner" class="spinner" hidden></span>
+          <span>Summarize Email</span>
+        </button>
+        <button id="copySummary" class="btn-outlined" type="button" disabled>Copy Summary</button>
+        <button id="openSettings" class="btn-outlined" type="button">Open Settings</button>
+      </div>
+      <div id="summarySection" class="summary-section" hidden>
+        <div id="summary" class="summary" role="region" aria-live="polite"></div>
+      </div>
+      <div class="meta" style="margin-top:10px;font-size:11px;color:#9aa9bf;display:flex;gap:10px;align-items:center;">
+        <a href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
+      </div>
+    </div>
+    <script src="reader-popup.js"></script>
+  </body>
+</html>
+
+
+
+
+
