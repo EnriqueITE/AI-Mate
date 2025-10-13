@@ -57,7 +57,7 @@ Notes
 - If the compose body is HTML, the reply is inserted as simple HTML; otherwise plain text.
 
 Packaging
-- Windows (PowerShell): `./pack.ps1` (outputs `ai-mate-<version>.xpi`)
+- Windows (PowerShell): `./pack.ps1` (outputs `dist/ai-mate-<version>.xpi`)
 - macOS/Linux: `zip -r ai-mate-<version>.xpi . -x "*.git*" -x "*.xpi" -x "tmp_unpack/*"`
 
 Release Checklist
@@ -65,3 +65,9 @@ Release Checklist
 - Verify `icons` render (16/24/32 toolbar, 48/96/128 listing)
 - Verify API key prompt and generation flow
 - Validate on Thunderbird 115+ via temporary install
+
+Release Notes
+- 1.0.14 (2025-10-13)
+  - Improved summary rendering with richer Markdown support while avoiding unsafe HTML injection.
+  - Prevented summary requests when no OpenAI API key is configured and guided users to the settings page.
+  - Refined packaging workflow to emit clean release bundles under `dist/` and keep build artefacts out of version control.

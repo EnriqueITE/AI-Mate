@@ -1,5 +1,6 @@
 // Persist last prompt for convenience
 const LAST_PROMPT_KEY = "lastPrompt";
+const NO_API_KEY_MESSAGE = "No API key set. Click 'Open Settings' to configure.";
 let composeTabId = null;
 
 const summarySection = document.getElementById("summarySection");
@@ -15,13 +16,159 @@ function getQueryParam(name) {
 
 function formatSummaryHtml(text) {
   if (!text) return "";
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  const bulleted = bolded.replace(/(^|\n)-\s+/g, (match, prefix) => prefix + '&bull; ');
-  return bulleted.replace(/\r?\n/g, '<br>');
+
+  const escapeHtml = (str) => str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  const formatEmphasis = (input) => {
+    let output = input
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/__(.+?)__/g, "<strong>$1</strong>");
+    output = output.replace(/(^|[^*])\*(?!\*)([^*\n]+?)\*(?!\*)/g, (match, prefix, content) => `${prefix}<em>${content}</em>`);
+    return output;
+  };
+
+  const applyInlineFormatting = (input) => {
+    const codePlaceholders = [];
+    const withCodePlaceholders = input.replace(/`([^`]+?)`/g, (_, code) => {
+      const placeholder = `__CODE_PLACEHOLDER_${codePlaceholders.length}__`;
+      codePlaceholders.push(code);
+      return placeholder;
+    });
+
+    let processed = withCodePlaceholders.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+      const safeUrl = (url || "").trim();
+      const formattedLabel = formatEmphasis(label);
+      if (!/^https?:\/\//i.test(safeUrl)) {
+        return formattedLabel;
+      }
+      const escapedUrl = safeUrl.replace(/"/g, "&quot;");
+      return `<a href="${escapedUrl}" target="_blank" rel="noreferrer noopener">${formattedLabel}</a>`;
+    });
+
+    processed = formatEmphasis(processed);
+
+    codePlaceholders.forEach((code, index) => {
+      const placeholder = new RegExp(`__CODE_PLACEHOLDER_${index}__`, "g");
+      processed = processed.replace(placeholder, `<code>${code}</code>`);
+    });
+
+    return processed;
+  };
+
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const htmlParts = [];
+  let inList = false;
+  let listTag = "";
+  let paragraphBuffer = [];
+
+  const closeList = () => {
+    if (inList) {
+      htmlParts.push(`</${listTag}>`);
+      inList = false;
+      listTag = "";
+    }
+  };
+
+  const flushParagraph = () => {
+    if (!paragraphBuffer.length) return;
+    const combined = paragraphBuffer.join(" ").trim();
+    if (combined) {
+      htmlParts.push(`<p>${applyInlineFormatting(escapeHtml(combined))}</p>`);
+    }
+    paragraphBuffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+
+    const headingMatch = rawLine.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      closeList();
+      const level = Math.min(4, headingMatch[1].length);
+      const content = applyInlineFormatting(escapeHtml(headingMatch[2].trim()));
+      htmlParts.push(`<h${level} class="summary-heading">${content}</h${level}>`);
+      continue;
+    }
+
+    const hrMatch = trimmed.match(/^(-{3,}|\*{3,}|_{3,})$/);
+    if (hrMatch) {
+      flushParagraph();
+      closeList();
+      htmlParts.push('<hr class="summary-rule">');
+      continue;
+    }
+
+    const quoteMatch = rawLine.match(/^\s*>\s?(.*)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      closeList();
+      const content = applyInlineFormatting(escapeHtml(quoteMatch[1].trim()));
+      htmlParts.push(`<blockquote>${content}</blockquote>`);
+      continue;
+    }
+
+    const ulMatch = rawLine.match(/^\s*[-*+]\s+(.*)$/);
+    if (ulMatch) {
+      flushParagraph();
+      if (!inList || listTag !== "ul") {
+        closeList();
+        htmlParts.push("<ul>");
+        inList = true;
+        listTag = "ul";
+      }
+      const content = applyInlineFormatting(escapeHtml(ulMatch[1].trim()));
+      htmlParts.push(`<li>${content}</li>`);
+      continue;
+    }
+
+    const olMatch = rawLine.match(/^\s*\d+\.\s+(.*)$/);
+    if (olMatch) {
+      flushParagraph();
+      if (!inList || listTag !== "ol") {
+        closeList();
+        htmlParts.push("<ol>");
+        inList = true;
+        listTag = "ol";
+      }
+      const content = applyInlineFormatting(escapeHtml(olMatch[1].trim()));
+      htmlParts.push(`<li>${content}</li>`);
+      continue;
+    }
+
+    closeList();
+    paragraphBuffer.push(rawLine.trim());
+  }
+
+  flushParagraph();
+  closeList();
+  return htmlParts.join("");
+}
+
+function replaceSummaryContent(target, markup) {
+  if (!target) return;
+  if (!markup) {
+    target.replaceChildren();
+    return;
+  }
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${markup}</div>`, "text/html");
+  const fragment = document.createDocumentFragment();
+  const container = doc.body.firstElementChild || doc.body;
+  const nodes = Array.from(container.childNodes);
+  nodes.forEach((node) => {
+    fragment.appendChild(target.ownerDocument.importNode(node, true));
+  });
+  target.replaceChildren(fragment);
 }
 
 function setSummaryLayout(expanded) {
@@ -31,7 +178,7 @@ function setSummaryLayout(expanded) {
 
 function clearSummary(hide = true) {
   if (!summarySection || !summaryOutput) return;
-  summaryOutput.innerHTML = "";
+  summaryOutput.replaceChildren();
   summaryOutput.classList.remove("error");
   if (hide) {
     summarySection.hidden = true;
@@ -58,7 +205,7 @@ function renderSummary(text, isError = false) {
     summaryOutput.classList.add("error");
   } else {
     summaryOutput.classList.remove("error");
-    summaryOutput.innerHTML = formatSummaryHtml(text);
+    replaceSummaryContent(summaryOutput, formatSummaryHtml(text));
   }
   if (clearSummaryBtn) clearSummaryBtn.disabled = false;
 }
@@ -74,9 +221,13 @@ function toggleSummarizeState(isLoading) {
 
 async function onSummarize() {
   toggleSummarizeState(true);
-  showSummaryMessage("Summarizing...");
   try {
-    const stored = await browser.storage.local.get({ summaryLanguage: "auto" });
+    const stored = await browser.storage.local.get({ summaryLanguage: "auto", openaiApiKey: "" });
+    if (!stored.openaiApiKey) {
+      showSummaryMessage(NO_API_KEY_MESSAGE);
+      return;
+    }
+    showSummaryMessage("Summarizing...");
     const payload = { type: "SUMMARIZE_EMAIL", language: stored.summaryLanguage || "auto" };
     if (composeTabId) payload.tabId = Number(composeTabId);
     const result = await browser.runtime.sendMessage(payload);
@@ -128,7 +279,6 @@ async function onGenerate() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (document.documentElement) document.documentElement.setAttribute("dir", "rtl");
-  if (document.documentElement) document.documentElement.setAttribute("dir", "rtl");
   if (document.body) {
     document.body.classList.add("open-left");
     document.body.classList.remove("show-summary");
@@ -174,7 +324,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!stored.openaiApiKey) {
       const warn = document.getElementById("warning");
       warn.classList.add("error");
-      warn.textContent = "No API key set. Click 'Open Settings' to configure.";
+      warn.textContent = NO_API_KEY_MESSAGE;
     }
   } catch {}
 

@@ -115,6 +115,46 @@ button:disabled { opacity: 0.6; cursor: default; }
 }
 
 .summary strong { color: #fff; }
+.summary h1,
+.summary h2,
+.summary h3,
+.summary h4 {
+  margin: 6px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.summary p {
+  margin: 0 0 6px;
+}
+.summary ul,
+.summary ol {
+  margin: 4px 0 8px 18px;
+  padding-left: 18px;
+}
+.summary li {
+  margin-bottom: 4px;
+}
+.summary blockquote {
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: rgba(66, 165, 245, 0.08);
+  border-left: 3px solid rgba(66, 165, 245, 0.5);
+  border-radius: 6px;
+  color: inherit;
+}
+.summary code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(66, 165, 245, 0.2);
+  font-family: "Fira Code", Consolas, "Courier New", monospace;
+  font-size: 11px;
+}
+.summary hr {
+  border: none;
+  border-top: 1px solid var(--outline);
+  margin: 8px 0;
+}
 
 .summary.error { color: var(--error); }
 

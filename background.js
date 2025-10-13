@@ -27,6 +27,26 @@ async function getSettings() {
 
 const LAST_PROMPT_KEY = "lastPrompt";
 
+function getComposeApi() {
+  const api = browser["compose"];
+  if (!api || typeof api.getComposeDetails !== "function" || typeof api.setComposeDetails !== "function") {
+    throw new Error("Compose API is not available in this application.");
+  }
+  return api;
+}
+
+function getMessagesApi() {
+  return browser["messages"] || null;
+}
+
+function getMessageDisplayApi() {
+  return browser["messageDisplay"] || null;
+}
+
+function getComposeActionApi() {
+  return browser["composeAction"] || null;
+}
+
 
 async function notify(title, message) {
   try {
@@ -191,57 +211,60 @@ function extractPlainTextFromPayload(part) {
 }
 
 async function getMessagePlainText(messageId) {
+  const messagesApi = getMessagesApi();
+  if (!messagesApi) {
+    console.warn("AI Mate: messages API is unavailable in this environment.");
+    return "";
+  }
+
   // Try messages.getFull first (preferred)
-  try {
-    const full = await browser.messages.getFull(messageId);
-    const plain = extractPlainTextFromPayload(full?.payload || full);
-    if (plain && plain.trim()) {
-      return plain;
+  if (typeof messagesApi.getFull === "function") {
+    try {
+      const full = await messagesApi.getFull(messageId);
+      const plain = extractPlainTextFromPayload(full?.payload || full);
+      if (plain && plain.trim()) {
+        return plain;
+      }
+    } catch (e) {
+      console.warn("AI Mate: messages.getFull failed:", e);
     }
-  } catch (e) {
-    console.warn("AI Mate: messages.getFull failed:", e);
   }
 
   // Try messages.getRaw as a fallback and attempt to strip HTML
-  try {
-    const raw = await browser.messages.getRaw(messageId);
-    if (raw && raw.length) {
-      // naive extraction: prefer text/plain parts if present, otherwise strip HTML tags
-      // Try to find a text/plain section in the raw source
-      const textPlainMatch = raw.match(/Content-Type: text\/plain;[\s\S]*?\r?\n\r?\n([\s\S]*)/i);
-      if (textPlainMatch && textPlainMatch[1]) {
-        const candidate = textPlainMatch[1].trim();
-        if (candidate) {
-          return candidate;
-        }
-      }
-      // Fallback: strip HTML tags from the raw source
-      const stripped = stripHtml(raw);
-      if (stripped && stripped.trim()) {
-        return stripped;
-      }
-    }
-  } catch (e) {
-    console.warn("AI Mate: messages.getRaw failed:", e);
-  }
-
-  // Older code paths tried browser.messages.getBody(); attempt if available
-  try {
-    if (typeof browser.messages.getBody === 'function') {
-      try {
-        const htmlBody = await browser.messages.getBody(messageId);
-        if (htmlBody) {
-          const plain = stripHtml(htmlBody);
-          if (plain && plain.trim()) {
-            return plain;
+  if (typeof messagesApi.getRaw === "function") {
+    try {
+      const raw = await messagesApi.getRaw(messageId);
+      if (raw && raw.length) {
+        const textPlainMatch = raw.match(/Content-Type: text\/plain;[\s\S]*?\r?\n\r?\n([\s\S]*)/i);
+        if (textPlainMatch && textPlainMatch[1]) {
+          const candidate = textPlainMatch[1].trim();
+          if (candidate) {
+            return candidate;
           }
         }
-      } catch (e) {
-        console.warn("AI Mate: messages.getBody failed:", e);
+        const stripped = stripHtml(raw);
+        if (stripped && stripped.trim()) {
+          return stripped;
+        }
       }
+    } catch (e) {
+      console.warn("AI Mate: messages.getRaw failed:", e);
     }
-  } catch (e) {
-    // ignore
+  }
+
+  // Older code paths tried messages.getBody(); attempt if available
+  if (typeof messagesApi.getBody === "function") {
+    try {
+      const htmlBody = await messagesApi.getBody(messageId);
+      if (htmlBody) {
+        const plain = stripHtml(htmlBody);
+        if (plain && plain.trim()) {
+          return plain;
+        }
+      }
+    } catch (e) {
+      console.warn("AI Mate: messages.getBody failed:", e);
+    }
   }
 
   console.warn("AI Mate: Unable to extract plain text for message", messageId);
@@ -303,7 +326,8 @@ async function generateReplyForCompose(tabId, userPrompt) {
     throw new Error("OpenAI API key not set. Configure it in Add-on Options.");
   }
 
-  const details = await browser.compose.getComposeDetails(tabId);
+  const composeApi = getComposeApi();
+  const details = await composeApi.getComposeDetails(tabId);
 
   const originalText = details.isPlainText
     ? (details.plainTextBody || "")
@@ -356,7 +380,7 @@ async function generateReplyForCompose(tabId, userPrompt) {
     const original = details.plainTextBody || "";
     const trimmedReply = (content || "").replace(/[\s\n]+$/g, "").replace(/^\s+/, "");
     const newBody = `${trimmedReply}\n${original.replace(/^\s+/, "")}`;
-    await browser.compose.setComposeDetails(tabId, { plainTextBody: newBody });
+    await composeApi.setComposeDetails(tabId, { plainTextBody: newBody });
   } else {
     const replyHtml = textToHtml(content);
     const original = details.body || "";
@@ -400,20 +424,21 @@ async function generateReplyForCompose(tabId, userPrompt) {
         // Trim extra trailing empty blocks and breaks
         .replace(/(?:<(?:br|hr)\b[^>]*>\s*)+\s*$/i, "")
         .replace(/(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+\s*$/i, "");
-      await browser.compose.setComposeDetails(tabId, { body: newHtml });
+      await composeApi.setComposeDetails(tabId, { body: newHtml });
     } catch (e) {
       const newHtml = `${replyHtml}${original}`
         .replace(/^\s*(?:<(?:br|hr)\b[^>]*>\s*)+/i, "")
         .replace(/^\s*(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+/i, "")
         .replace(/(?:<(?:br|hr)\b[^>]*>\s*)+\s*$/i, "")
         .replace(/(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+\s*$/i, "");
-      await browser.compose.setComposeDetails(tabId, { body: newHtml });
+      await composeApi.setComposeDetails(tabId, { body: newHtml });
     }
   }
 }
 
 async function summarizeEmailForCompose(tabId, userPrompt = "", language = "") {
-  const details = await browser.compose.getComposeDetails(tabId);
+  const composeApi = getComposeApi();
+  const details = await composeApi.getComposeDetails(tabId);
   const originalText = details.isPlainText
     ? (details.plainTextBody || "")
     : stripHtml(details.body || "");
@@ -425,9 +450,13 @@ async function summarizeDisplayedMessage(tabId, userPrompt = "", language = "") 
   if (!Number.isFinite(resolvedTabId) || resolvedTabId < 1) {
     resolvedTabId = undefined;
   }
+  const messageDisplayApi = getMessageDisplayApi();
+  if (!messageDisplayApi || typeof messageDisplayApi.getDisplayedMessage !== "function") {
+    throw new Error("Message display API is not available in this application.");
+  }
   const message = resolvedTabId !== undefined
-    ? await browser.messageDisplay.getDisplayedMessage(resolvedTabId)
-    : await browser.messageDisplay.getDisplayedMessage();
+    ? await messageDisplayApi.getDisplayedMessage(resolvedTabId)
+    : await messageDisplayApi.getDisplayedMessage();
   if (!message) {
     throw new Error("Select an email to summarize.");
   }
@@ -543,8 +572,9 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // Fallback: if popup cannot open or user clicks the toolbar button directly,
 // generate using the last prompt (or none), and report via notifications.
-if (browser.composeAction && browser.composeAction.onClicked) {
-  browser.composeAction.onClicked.addListener(async (tab) => {
+const composeActionApi = getComposeActionApi();
+if (composeActionApi && composeActionApi.onClicked) {
+  composeActionApi.onClicked.addListener(async (tab) => {
     try {
       const tabId = (tab && tab.id) ? tab.id : await getActiveComposeTabId();
       const { [LAST_PROMPT_KEY]: lastPrompt } = await browser.storage.local.get({ [LAST_PROMPT_KEY]: "" });
