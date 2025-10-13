@@ -1,45 +1,57 @@
 {
-  "manifest_version": 2,
-  "name": "AI Mate",
-  "author": "Enrique Serrano Aparicio",
-  "homepage_url": "https://github.com/EnriqueITE/AI-Mate",
-  "version": "1.0.6",
-  "description": "Adds a compose button to generate an email reply using OpenAI. Includes settings for API key.",
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "ai-mate@enriqueite.com",
-      "strict_min_version": "115.0"
-    }
-  },
-  "permissions": [
-    "storage",
-    "compose",
-    "tabs",
-    "notifications",
-    "https://api.openai.com/*"
-  ],
-  "background": {
-    "scripts": ["background.js"],
-    "persistent": true
-  },
-  "icons": {
-    "48": "icons/icon-48.png",
-    "96": "icons/icon-96.png",
-    "128": "icons/icon-128.png"
-  },
-  
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": true
-  },
-  "compose_action": {
-    "default_title": "AI Mate Reply",
-    "default_popup": "popup.html",
-    "default_area": "maintoolbar",
-    "default_icon": {
-      "16": "icons/icon-16.png",
-      "24": "icons/icon-24.png",
-      "32": "icons/icon-32.png"
-    }
-  }
+    "manifest_version":  2,
+    "name":  "AI Mate",
+    "author":  "Enrique Serrano Aparicio",
+    "homepage_url":  "https://github.com/EnriqueITE/AI-Mate",
+    "version":  "1.0.16",
+    "description":  "Adds a compose button to generate AI replies and summarizes email threads, with settings for your OpenAI API key.",
+    "browser_specific_settings":  {
+                                      "gecko":  {
+                                                    "id":  "ai-mate@enriqueite.com",
+                                                    "strict_min_version":  "115.0"
+                                                }
+                                  },
+    "permissions":  [
+                        "storage",
+                        "compose",
+                        "tabs",
+                        "messagesRead",
+                        "notifications",
+                        "https://api.openai.com/*"
+                    ],
+    "background":  {
+                       "scripts":  [
+                                       "background.js"
+                                   ],
+                       "persistent":  true
+                   },
+    "icons":  {
+                  "48":  "icons/icon-48.png",
+                  "96":  "icons/icon-96.png",
+                  "128":  "icons/icon-128.png"
+              },
+    "options_ui":  {
+                       "page":  "options.html",
+                       "open_in_tab":  true
+                   },
+    "compose_action":  {
+                           "default_title":  "AI Mate Reply",
+                           "default_popup":  "popup.html",
+                           "default_area":  "maintoolbar",
+                           "default_icon":  {
+                                                "16":  "icons/icon-16.png",
+                                                "24":  "icons/icon-24.png",
+                                                "32":  "icons/icon-32.png"
+                                            }
+                       },
+    "message_display_action":  {
+                                   "default_title":  "Summarize Email",
+                                   "default_popup":  "reader-popup.html",
+                                   "default_area":  "message_display_toolbar",
+                                   "default_icon":  {
+                                                        "16":  "icons/icon-16.png",
+                                                        "24":  "icons/icon-24.png",
+                                                        "32":  "icons/icon-32.png"
+                                                    }
+                               }
 }
