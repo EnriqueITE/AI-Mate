@@ -12,6 +12,7 @@ Author: Enrique Serrano Aparicio (https://x.com/EnriqueITE | https://buymeacoffe
 
 Overview
 - Adds a button in the compose window to generate a reply using OpenAI.
+- Summarizes email threads directly from the reader popup using the same model.
 - Optional prompt in a popup to steer the reply.
 - Settings page to store your OpenAI API key and choose the model.
 
@@ -67,6 +68,11 @@ Release Checklist
 - Validate on Thunderbird 115+ via temporary install
 
 Release Notes
+- 1.0.16 (2025-10-13)
+  - Clarified marketing copy to highlight support for summarizing multi-message threads.
+  - Refreshed package metadata for Thunderbird release submission.
+- 1.0.15 (2025-10-13)
+  - Version bump with refreshed Thunderbird package for marketplace submission.
 - 1.0.14 (2025-10-13)
   - Improved summary rendering with richer Markdown support while avoiding unsafe HTML injection.
   - Prevented summary requests when no OpenAI API key is configured and guided users to the settings page.
