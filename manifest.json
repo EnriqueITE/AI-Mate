@@ -3,7 +3,7 @@
     "name":  "AI Mate",
     "author":  "Enrique Serrano Aparicio",
     "homepage_url":  "https://github.com/EnriqueITE/AI-Mate",
-    "version":  "1.0.16",
+    "version":  "1.0.17",
     "description":  "Adds a compose button to generate AI replies and summarizes email threads, with settings for your OpenAI API key.",
     "browser_specific_settings":  {
                                       "gecko":  {
@@ -21,6 +21,7 @@
                     ],
     "background":  {
                        "scripts":  [
+                                       "lib/dompurify.min.js",
                                        "background.js"
                                    ],
                        "persistent":  true

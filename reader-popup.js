@@ -1,4 +1,6 @@
-﻿const summarySection = document.getElementById("summarySection");
+/* global DOMPurify */
+
+const summarySection = document.getElementById("summarySection");
 const summaryOutput = document.getElementById("summary");
 const statusEl = document.getElementById("status");
 const summarizeBtn = document.getElementById("summarize");
@@ -6,6 +8,7 @@ const copyBtn = document.getElementById("copySummary");
 const openSettingsBtn = document.getElementById("openSettings");
 const sumSpinner = document.getElementById("sumSpinner");
 const NO_API_KEY_MESSAGE = 'No API key set. Click "Open Settings" to configure your OpenAI key.';
+const SUMMARIES_DISABLED_MESSAGE = "Message display summaries are turned off. Open Settings to opt in.";
 
 let displayTabId = null;
 
@@ -156,16 +159,17 @@ function formatSummaryHtml(text) {
 
 function replaceSummaryContent(target, markup) {
   if (!target) return;
+  target.replaceChildren();
   if (!markup) {
-    target.replaceChildren();
     return;
   }
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${markup}</div>`, "text/html");
-  const fragment = document.createDocumentFragment();
-  const container = doc.body.firstElementChild || doc.body;
-  const nodes = Array.from(container.childNodes);
-  nodes.forEach((node) => {
+  const sanitized = (typeof DOMPurify !== "undefined" && typeof DOMPurify.sanitize === "function")
+    ? DOMPurify.sanitize(markup)
+    : markup;
+  const template = target.ownerDocument.createElement("template");
+  template.innerHTML = sanitized;
+  const fragment = target.ownerDocument.createDocumentFragment();
+  template.content.childNodes.forEach((node) => {
     fragment.appendChild(target.ownerDocument.importNode(node, true));
   });
   target.replaceChildren(fragment);
@@ -213,17 +217,29 @@ function showSummaryError(message) {
 }
 
 async function fetchSummary(userPrompt = "") {
-  toggleLoading(true);
+  let isLoading = false;
   if (summaryOutput) {
     summaryOutput.textContent = "";
   }
   try {
-    const stored = await browser.storage.local.get({ summaryLanguage: "auto", openaiApiKey: "" });
+    const stored = await browser.storage.local.get({
+      summaryLanguage: "auto",
+      openaiApiKey: "",
+      enableReaderSummaries: false
+    });
+    if (!stored.enableReaderSummaries) {
+      showSummaryNotice(SUMMARIES_DISABLED_MESSAGE);
+      setStatus("Enable message display summaries in Settings to use this feature.", "warn");
+      if (summarizeBtn) summarizeBtn.disabled = true;
+      return;
+    }
     if (!stored.openaiApiKey) {
       showSummaryNotice(NO_API_KEY_MESSAGE);
       setStatus("Add your OpenAI API key in settings to enable summaries.", "warn");
       return;
     }
+    toggleLoading(true);
+    isLoading = true;
     setStatus("Summarizing...");
     const payload = { type: "SUMMARIZE_DISPLAYED_MESSAGE", prompt: userPrompt, language: stored.summaryLanguage || "auto" };
     if (displayTabId) {
@@ -243,7 +259,9 @@ async function fetchSummary(userPrompt = "") {
     showSummaryError(`Error: ${message}`);
     setStatus("Failed to summarize.", "error");
   } finally {
-    toggleLoading(false);
+    if (isLoading) {
+      toggleLoading(false);
+    }
   }
 }
 
@@ -284,6 +302,36 @@ async function openSettings() {
   }
 }
 
+async function initializeReaderPopup() {
+  try {
+    const stored = await browser.storage.local.get({
+      enableReaderSummaries: false,
+      autoSummariesOnOpen: false,
+      openaiApiKey: ""
+    });
+    const featureEnabled = !!stored.enableReaderSummaries;
+    if (summarizeBtn) summarizeBtn.disabled = !featureEnabled;
+    if (!featureEnabled) {
+      showSummaryNotice(SUMMARIES_DISABLED_MESSAGE);
+      setStatus("Enable message display summaries in Settings to opt in.", "warn");
+      return;
+    }
+    if (!stored.openaiApiKey) {
+      showSummaryNotice(NO_API_KEY_MESSAGE);
+      setStatus("Add your OpenAI API key in settings to enable summaries.", "warn");
+      return;
+    }
+    if (stored.autoSummariesOnOpen) {
+      await fetchSummary("");
+    } else {
+      setStatus("Click Summarize to send this email to OpenAI.", "");
+    }
+  } catch (err) {
+    console.error("AI Mate: failed to initialize reader popup", err);
+    setStatus(`Failed to load settings: ${err?.message || err}`, "error");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   displayTabId = getQueryParam("tabId");
   if (summarizeBtn) summarizeBtn.addEventListener("click", () => fetchSummary(""));
@@ -292,5 +340,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     e.preventDefault();
     openSettings();
   });
-  fetchSummary();
+  await initializeReaderPopup();
 });

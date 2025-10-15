@@ -1,4 +1,18 @@
+/* global DOMPurify */
 /* Background script for AI Reply Assistant */
+
+function sanitizeAiContent(content) {
+  const text = typeof content === "string" ? content : "";
+  if (!text) return "";
+  try {
+    if (typeof DOMPurify !== "undefined" && typeof DOMPurify.sanitize === "function") {
+      return DOMPurify.sanitize(text);
+    }
+  } catch (err) {
+    console.warn("AI Mate: DOMPurify sanitize failed, returning raw content.", err);
+  }
+  return text;
+}
 
 async function getSettings() {
   const {
@@ -190,8 +204,9 @@ async function summarizeTextContent(originalText, userPrompt = "", language = "a
 
   const data = await resp.json();
   const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("No summary generated");
-  return content;
+  const sanitized = sanitizeAiContent(content);
+  if (!sanitized) throw new Error("No summary generated");
+  return sanitized;
 }
 
 function extractPlainTextFromPayload(part) {
@@ -446,6 +461,12 @@ async function summarizeEmailForCompose(tabId, userPrompt = "", language = "") {
 }
 
 async function summarizeDisplayedMessage(tabId, userPrompt = "", language = "") {
+  const { enableReaderSummaries = false } = await browser.storage.local.get({
+    enableReaderSummaries: false
+  });
+  if (!enableReaderSummaries) {
+    throw new Error("Message display summaries are disabled in the add-on options.");
+  }
   let resolvedTabId = Number(tabId);
   if (!Number.isFinite(resolvedTabId) || resolvedTabId < 1) {
     resolvedTabId = undefined;

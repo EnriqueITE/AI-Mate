@@ -158,6 +158,16 @@ button:disabled { opacity: 0.6; cursor: default; }
 
 .summary.error { color: var(--error); }
 
+.support-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.support-link:hover {
+  color: var(--secondary);
+}
+
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.2);

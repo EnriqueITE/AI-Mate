@@ -1,72 +1,58 @@
-AI Mate - Thunderbird Add-on
-                                                 
-Repository: https://github.com/EnriqueITE/AI-Mate
-Author: Enrique Serrano Aparicio (https://x.com/EnriqueITE | https://buymeacoffee.com/enriqueite)
+# AI Mate for Thunderbird
 
-Overview
-- Adds a button in the compose window to generate a reply using OpenAI.
-- Summarizes email threads directly from the reader popup using the same model.
-- Optional prompt in a popup to steer the reply.
-- Settings page to store your OpenAI API key and choose the model.
+AI Mate adds OpenAI powered assistance to Thunderbird. It can draft replies directly in the compose window and summarize messages from both compose and reader toolbars. Everything runs locally in your Thunderbird profile; the add-on never stores data on remote servers.
 
-Model Configuration
-- Where: Thunderbird > Add-ons > Extensions > AI Mate > Preferences.
-- Models: Choose among `gpt-5`, `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini`, `gpt-4.1`, `gpt-3.5-turbo`.
-- Defaults: Click "Use model defaults" to apply recommended parameters per model.
-  - gpt-5 → temperature 1, top_p 1, presence 0, frequency 0, max_tokens empty
-  - gpt-4o(-mini) → temperature 0.4, top_p 1, presence 0, frequency 0, max_tokens empty
-  - gpt-4.1(-mini) → temperature 0.5, top_p 1, presence 0, frequency 0, max_tokens empty
-  - gpt-3.5-turbo → temperature 0.7, top_p 1, presence 0, frequency 0, max_tokens empty
-- Advanced parameters (optional):
-  - Temperature (0–2): Creativity. Higher = more diverse replies.
-  - Top P (0–1): Nucleus sampling. Usually keep at 1.
-  - Max tokens: Hard cap for reply length. Leave empty to let the API decide.
-  - Presence/Frequency penalty (-2–2): Reduce repetition, encourage new topics.
-- gpt-5 constraints: For `gpt-5`, advanced fields are disabled. The add-on only sends supported fields (e.g., omits temperature/top_p/penalties) and includes a fallback to strip unsupported params if the API returns `unsupported_value`.
-- Storage: Your selection (API key, model, and parameters) is saved locally via `browser.storage.local`.
-- Apply at generation: The background script builds the OpenAI Chat Completions payload using your saved model and parameters. `max_tokens` is only sent if you set a number.
+## Features
+- **Compose reply** button that generates a first draft using the message currently open in the composer.
+- **Reader summary popup** that can summarize the selected message thread (requires an explicit opt-in in the options page).
+- **Custom instructions and tone controls** including temperature, top-p, penalties, and preferred summary style or language.
+- **Per-user settings** stored with `browser.storage.local`, so nothing is synced or shared across devices.
 
-Files
-- manifest.json
-- background.js
-- popup.html, popup.js, popup.css
-- options.html, options.js, options.css
-- Logo.png, PRIVACY.md, pack.ps1
+## Requirements
+- Thunderbird 115 or newer.
+- An active OpenAI API key (create one at <https://platform.openai.com/api-keys>).
 
-Install (Temporary)
-1. Open Thunderbird.
-2. Go to Tools > Developer Tools > Debug Add-ons (or open about:debugging#/runtime/this-firefox and switch to "This Thunderbird").
-3. Click "Load Temporary Add-on" and select this folder's manifest.json.
-4. Open Add-ons Manager > Extensions > AI Mate > Preferences to set your OpenAI API key and model.
+## Installation (temporary testing)
+1. Open Thunderbird and navigate to Tools > Developer Tools > Debug Add-ons (or visit `about:debugging#/runtime/this-thunderbird`).
+2. Click **Load Temporary Add-on** and choose the `manifest.json` file inside this repository.
+3. The add-on will be available until Thunderbird is closed.
 
-Usage
-- Compose a reply to any message so the editor contains the quoted original.
-- Click the "Generate AI Reply" button in the compose toolbar (enable it via toolbar customization if hidden).
-- Optionally enter an instruction (prompt) in the popup, then click "Generate Reply".
-- The add-on inserts the generated text at the top and keeps the quoted original below.
+## Initial Setup
+1. Go to Thunderbird > Add-ons and Themes > Extensions > AI Mate > Preferences (or use the add-on gear menu to open options).
+2. Enter your OpenAI API key, pick a model, and adjust any optional parameters.
+3. (Optional) Enable **message display summaries** if you want the reader toolbar button to send currently viewed messages to OpenAI. You can also opt in to start summarizing automatically when the window opens.
 
-Notes
-- The API key is stored locally via browser.storage.local (not synced).
-- The add-on only reads the current compose content; it does not fetch messages from the account.
-- If the compose body is HTML, the reply is inserted as simple HTML; otherwise plain text.
+## Using AI Mate
 
-Packaging
-- Windows (PowerShell): `./pack.ps1` (outputs `dist/ai-mate-<version>.xpi`)
-- macOS/Linux: `zip -r ai-mate-<version>.xpi . -x "*.git*" -x "*.xpi" -x "tmp_unpack/*"`
+### Generate Replies
+1. Open a message reply or compose window with the original email quoted.
+2. Click the **AI Mate Reply** button (add it via toolbar customization if hidden).
+3. Optionally type extra guidance in the popup prompt field.
+4. Click **Generate Reply**. The add-on inserts the AI draft at the top of the compose body while leaving the quoted message beneath it.
 
-Release Checklist
-- Bump `manifest.json` version
-- Verify `icons` render (16/24/32 toolbar, 48/96/128 listing)
-- Verify API key prompt and generation flow
-- Validate on Thunderbird 115+ via temporary install
+### Summarize in the Composer
+1. Open the AI Mate popup from the compose toolbar.
+2. Click **Summarize Email** to send the current draft and quoted content to OpenAI.
+3. The summary appears in the popup; use **Clear summary** to remove it.
 
-Release Notes
-- 1.0.16 (2025-10-13)
-  - Clarified marketing copy to highlight support for summarizing multi-message threads.
-  - Refreshed package metadata for Thunderbird release submission.
-- 1.0.15 (2025-10-13)
-  - Version bump with refreshed Thunderbird package for marketplace submission.
-- 1.0.14 (2025-10-13)
-  - Improved summary rendering with richer Markdown support while avoiding unsafe HTML injection.
-  - Prevented summary requests when no OpenAI API key is configured and guided users to the settings page.
-  - Refined packaging workflow to emit clean release bundles under `dist/` and keep build artefacts out of version control.
+### Summarize in the Message Reader
+1. Enable **message display summaries** in the options page.
+2. Select any message and click the AI Mate button in the message display toolbar.
+3. The reader popup shows the summary once OpenAI responds. Copy it with **Copy Summary** if needed.
+
+## Data Use and Privacy
+- No email content is sent to OpenAI until you provide a valid API key and trigger an AI feature.
+- When triggered, the add-on sends the message text, subject, sender, recipient list, and any custom instruction to the OpenAI API.
+- Responses from OpenAI are sanitized with DOMPurify before they are inserted into Thunderbird.
+- All configuration data remains in `browser.storage.local` within your Thunderbird profile.
+
+## Packaging for Release
+- **Windows (PowerShell):** `./pack.ps1` (outputs `dist/ai-mate-<version>.xpi`)
+- **macOS/Linux:** `zip -r ai-mate-<version>.xpi . -x "*.git*" -x "*.xpi" -x "tmp_unpack/*"`
+
+## Support
+- Questions or feedback: <https://github.com/EnriqueITE/AI-Mate>
+- X (Twitter): <https://x.com/EnriqueITE>
+- Buy Me a Coffee: <https://buymeacoffee.com/enriqueite>
+
+

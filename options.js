@@ -3,7 +3,7 @@ const api = typeof browser !== 'undefined' ? browser : (typeof messenger !== 'un
 
 async function load() {
   if (!api) return;
-  const { openaiApiKey, openaiModel, lastPrompt, summaryLanguage, summaryStyle, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty } = await api.storage.local.get({
+  const { openaiApiKey, openaiModel, lastPrompt, summaryLanguage, summaryStyle, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty, enableReaderSummaries, autoSummariesOnOpen } = await api.storage.local.get({
     openaiApiKey: "",
     openaiModel: "gpt-4o-mini",
     lastPrompt: "",
@@ -13,7 +13,9 @@ async function load() {
     openaiTopP: 1,
     openaiMaxTokens: null,
     openaiPresencePenalty: 0,
-    openaiFrequencyPenalty: 0
+    openaiFrequencyPenalty: 0,
+    enableReaderSummaries: false,
+    autoSummariesOnOpen: false
   });
   document.getElementById("apiKey").value = openaiApiKey || "";
   document.getElementById("model").value = openaiModel || "gpt-4o-mini";
@@ -27,6 +29,11 @@ async function load() {
   document.getElementById("maxTokens").value = (openaiMaxTokens ?? "");
   document.getElementById("presencePenalty").value = (openaiPresencePenalty ?? 0);
   document.getElementById("frequencyPenalty").value = (openaiFrequencyPenalty ?? 0);
+  const readerToggle = document.getElementById("enableReaderSummaries");
+  if (readerToggle) readerToggle.checked = !!enableReaderSummaries;
+  const autoToggle = document.getElementById("autoSummariesOnOpen");
+  if (autoToggle) autoToggle.checked = !!enableReaderSummaries && !!autoSummariesOnOpen;
+  syncReaderSummaryOptions(!!enableReaderSummaries);
 
   toggleAdvancedForModel(document.getElementById("model").value);
 }
@@ -42,6 +49,8 @@ async function save() {
   const presencePenalty = parseFloat(document.getElementById("presencePenalty").value);
   const frequencyPenalty = parseFloat(document.getElementById("frequencyPenalty").value);
   const maxTokens = maxTokensRaw === "" ? null : parseInt(maxTokensRaw, 10);
+  const enableReaderSummaries = !!(document.getElementById("enableReaderSummaries") && document.getElementById("enableReaderSummaries").checked);
+  const autoSummariesOnOpen = enableReaderSummaries && !!(document.getElementById("autoSummariesOnOpen") && document.getElementById("autoSummariesOnOpen").checked);
   try {
     await api.storage.local.set({
       openaiApiKey: apiKey,
@@ -53,7 +62,9 @@ async function save() {
       openaiTopP: isFinite(topP) ? topP : 1,
       openaiMaxTokens: (maxTokens !== null && isFinite(maxTokens)) ? maxTokens : null,
       openaiPresencePenalty: isFinite(presencePenalty) ? presencePenalty : 0,
-      openaiFrequencyPenalty: isFinite(frequencyPenalty) ? frequencyPenalty : 0
+      openaiFrequencyPenalty: isFinite(frequencyPenalty) ? frequencyPenalty : 0,
+      enableReaderSummaries,
+      autoSummariesOnOpen
     });
     status.textContent = "Saved.";
   } catch (e) {
@@ -68,6 +79,15 @@ function toggleAdvancedForModel(model) {
   for (const id of advancedIds) {
     const el = document.getElementById(id);
     if (el) el.disabled = disable;
+  }
+}
+
+function syncReaderSummaryOptions(enabled) {
+  const autoToggle = document.getElementById("autoSummariesOnOpen");
+  if (!autoToggle) return;
+  autoToggle.disabled = !enabled;
+  if (!enabled) {
+    autoToggle.checked = false;
   }
 }
 
@@ -154,4 +174,10 @@ document.addEventListener("DOMContentLoaded", () => {
   attachValidation("maxTokens", { min: 1, max: null, integer: true });
   attachValidation("presencePenalty", { min: -2, max: 2, integer: false });
   attachValidation("frequencyPenalty", { min: -2, max: 2, integer: false });
+  const readerToggle = document.getElementById("enableReaderSummaries");
+  if (readerToggle) {
+    readerToggle.addEventListener("change", (e) => {
+      syncReaderSummaryOptions(!!e.target.checked);
+    });
+  }
 });

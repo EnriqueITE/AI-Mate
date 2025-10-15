@@ -20,6 +20,11 @@
         </div>
       </div>
 
+      <div class="notice-block" role="note" aria-live="polite">
+        <strong>How AI Mate uses your data</strong>
+        <p>When you trigger an AI feature (for example, Generate Reply or request a summary from the compose or message display windows), AI Mate sends the relevant email content, subject, sender, recipient list, and your prompt to OpenAI using your API key. No email data is transmitted until you enter a valid API key.</p>
+      </div>
+
       <div class="field">
         <label for="model">Model</label>
         <div style="display:flex; gap:8px; align-items:center;">
@@ -101,6 +106,19 @@
         <div class="hint">Controls the tone and length of generated summaries.</div>
       </div>
 
+      <div class="field">
+        <div class="checkbox-row">
+          <input id="enableReaderSummaries" type="checkbox" />
+          <label for="enableReaderSummaries">Enable message display summaries</label>
+        </div>
+        <div class="hint">When enabled, clicking Summarize in the message display toolbar sends the currently selected message's subject, sender, recipient list, and body text to OpenAI to generate a summary.</div>
+        <div class="checkbox-row nested">
+          <input id="autoSummariesOnOpen" type="checkbox" />
+          <label for="autoSummariesOnOpen">Start summarizing automatically when the summary window opens</label>
+        </div>
+        <div class="hint nested">Automatic summarization only runs after you opt in to this feature and have entered a valid API key.</div>
+      </div>
+
       <div class="actions">
         <button id="save">
           <span class="btn-icon" aria-hidden="true">
@@ -118,7 +136,7 @@
       </div>
     </div>
     <div class="meta">
-      <a href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
+      <a class="support-link" href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
       <a href="https://x.com/enriqueite" target="_blank" rel="noreferrer">X @enriqueite</a>
       <a href="https://instagram.com/enriqueite_" target="_blank" rel="noreferrer">@enriqueite_</a>
     </div>
