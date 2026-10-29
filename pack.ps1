@@ -3,78 +3,105 @@ Param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
-# Read version from manifest
-$manifest = Get-Content -Raw -Path "manifest.json" | ConvertFrom-Json
-$name = "ai-mate"
-$version = $manifest.version
-if (-not $version) { $version = "0.0.0" }
+$sourceRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
+$manifestPath = Join-Path $sourceRoot "manifest.json"
+$manifest = Get-Content -Raw -LiteralPath $manifestPath -Encoding UTF8 | ConvertFrom-Json
+$version = [string]$manifest.version
+if ($version -notmatch '^\d+(?:\.\d+){1,3}$') {
+  throw "The manifest must contain a valid numeric release version."
+}
+
+# Only runtime assets and distribution notices belong in the XPI.
+$packageFiles = @(
+  "manifest.json",
+  "reply-core.js",
+  "model-config.js",
+  "background.js",
+  "popup.html",
+  "popup.css",
+  "popup.js",
+  "options.html",
+  "options.js",
+  "reader-popup.html",
+  "reader-popup.css",
+  "reader-popup.js",
+  "Logo.png",
+  "icons/icon-16.png",
+  "icons/icon-24.png",
+  "icons/icon-32.png",
+  "icons/icon-48.png",
+  "icons/icon-96.png",
+  "icons/icon-128.png",
+  "lib/dompurify.min.js",
+  "lib/DOMPurify.LICENSE",
+  "LICENSE",
+  "NOTICE",
+  "PRIVACY.md",
+  "VENDOR"
+)
+
+foreach ($relativePath in $packageFiles) {
+  $sourcePath = Join-Path $sourceRoot $relativePath
+  if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+    throw "Required package file is missing: $relativePath"
+  }
+}
 
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
   $OutDir = "dist"
 }
-
-$resolvedOutDir = Resolve-Path -Path $OutDir -ErrorAction SilentlyContinue
-if (-not $resolvedOutDir) {
-  $resolvedOutDir = Join-Path -Path (Get-Location) -ChildPath $OutDir
-  if (-not (Test-Path $resolvedOutDir)) {
-    New-Item -ItemType Directory -Path $resolvedOutDir | Out-Null
-  }
+if ([System.IO.Path]::IsPathRooted($OutDir)) {
+  $packageOutDir = [System.IO.Path]::GetFullPath($OutDir)
 } else {
-  $resolvedOutDir = $resolvedOutDir.Path
+  $packageOutDir = [System.IO.Path]::GetFullPath((Join-Path $sourceRoot $OutDir))
 }
+[System.IO.Directory]::CreateDirectory($packageOutDir) | Out-Null
 
-$destZip = Join-Path $resolvedOutDir "$name-$version.zip"
-$destXpi = Join-Path $resolvedOutDir "$name-$version.xpi"
-if (Test-Path $destZip) { Remove-Item $destZip -Force }
-if (Test-Path $destXpi) { Remove-Item $destXpi -Force }
+$destXpi = Join-Path $packageOutDir "ai-mate-$version.xpi"
+# A sibling temporary file allows an atomic rename/replace after the archive closes.
+$temporaryXpi = Join-Path $packageOutDir (".ai-mate-" + [guid]::NewGuid().ToString("N") + ".tmp")
+Add-Type -AssemblyName System.IO.Compression
 
-# Stage files to preserve folder structure while excluding build artefacts
-$tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ai-mate-pack-" + [guid]::NewGuid())
-New-Item -ItemType Directory -Path $tmpDir | Out-Null
-
-$excludedPatterns = @(
-  "pack.ps1",
-  "dist",
-  "README.md",
-  "*.zip",
-  "*.xpi",
-  ".DS_Store",
-  "Thumbs.db"
-)
-
-$items = Get-ChildItem -Force | Where-Object {
-  $name = $_.Name
-  $isExcluded = $false
-  foreach ($pattern in $excludedPatterns) {
-    if ($name -like $pattern) {
-      $isExcluded = $true
-      break
+try {
+  $archiveStream = [System.IO.File]::Open($temporaryXpi, [System.IO.FileMode]::CreateNew,
+    [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  try {
+    $archive = [System.IO.Compression.ZipArchive]::new($archiveStream,
+      [System.IO.Compression.ZipArchiveMode]::Create, $true)
+    try {
+      foreach ($relativePath in $packageFiles) {
+        $entry = $archive.CreateEntry($relativePath.Replace('\', '/'),
+          [System.IO.Compression.CompressionLevel]::Optimal)
+        $entryStream = $entry.Open()
+        try {
+          $sourceStream = [System.IO.File]::OpenRead((Join-Path $sourceRoot $relativePath))
+          try {
+            $sourceStream.CopyTo($entryStream)
+          } finally {
+            $sourceStream.Dispose()
+          }
+        } finally {
+          $entryStream.Dispose()
+        }
+      }
+    } finally {
+      $archive.Dispose()
     }
+  } finally {
+    $archiveStream.Dispose()
   }
 
-  -not $isExcluded -and
-  $name -notmatch '^\.git$' -and
-  $name -notmatch '^_tmp' -and
-  $name -notmatch '^ai-mate-\d+\.\d+\.\d+\.xpi$' -and
-  $name -notmatch '^ai-mate-\d+\.\d+\.\d+\.zip$'
-}
-
-foreach ($item in $items) {
-  $target = Join-Path $tmpDir $item.Name
-  if ($item.PSIsContainer) {
-    Copy-Item -Path $item.FullName -Destination $target -Recurse -Force
+  if ([System.IO.File]::Exists($destXpi)) {
+    [System.IO.File]::Replace($temporaryXpi, $destXpi, [System.Management.Automation.Language.NullString]::Value)
   } else {
-    Copy-Item -Path $item.FullName -Destination $target -Force
+    [System.IO.File]::Move($temporaryXpi, $destXpi)
+  }
+} finally {
+  if ([System.IO.File]::Exists($temporaryXpi)) {
+    [System.IO.File]::Delete($temporaryXpi)
   }
 }
 
-$sourceItems = Get-ChildItem -Path $tmpDir -Force
-if (-not $sourceItems) { throw "Nothing to package." }
-Compress-Archive -Path ($sourceItems.FullName) -DestinationPath $destZip -Force
-
-Remove-Item $tmpDir -Recurse -Force
-$finalName = Split-Path $destXpi -Leaf
-Rename-Item -Path $destZip -NewName $finalName
-$finalPath = Join-Path $resolvedOutDir $finalName
-Write-Host "Packed -> $finalPath"
+Write-Host "Packed -> $destXpi"

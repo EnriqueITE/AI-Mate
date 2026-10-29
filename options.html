@@ -22,29 +22,28 @@
 
       <div class="notice-block" role="note" aria-live="polite">
         <strong>How AI Mate uses your data</strong>
-        <p>When you trigger an AI feature (for example, Generate Reply or request a summary from the compose or message display windows), AI Mate sends the relevant email content, subject, sender, recipient list, and your prompt to OpenAI using your API key. No email data is transmitted until you enter a valid API key.</p>
+        <p>When you generate or improve a draft, AI Mate sends the relevant email content, subject, recipients, your instruction and writing preferences to OpenAI using your API key. Summaries send the relevant message content and summary settings. Undo runs locally and does not contact OpenAI. No email data is transmitted without an API key.</p>
       </div>
 
       <div class="field">
         <label for="model">Model</label>
         <div style="display:flex; gap:8px; align-items:center;">
-        <select id="model">
-          <option value="gpt-5">gpt-5</option>
-          <option value="gpt-4o-mini">gpt-4o-mini</option>
-          <option value="gpt-4o">gpt-4o</option>
-          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-          <option value="gpt-4.1">gpt-4.1</option>
-          <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
-        </select>
+        <select id="model" aria-describedby="modelDescription parameterPolicy"></select>
         <button id="useDefaults" type="button" class="btn-outlined">Use model defaults</button>
         </div>
-        <div class="hint">Tip: Some models restrict parameters; defaults are safe.</div>
+        <div id="customModelRow" hidden>
+          <label for="customModel">Model ID</label>
+          <input id="customModel" type="text" autocomplete="off" spellcheck="false" placeholder="Enter an exact OpenAI model ID" style="width:100%; box-sizing:border-box" aria-describedby="modelDescription modelValidation" />
+          <div id="modelValidation" class="status error" role="status"></div>
+        </div>
+        <div id="modelDescription" class="hint"></div>
+        <div id="parameterPolicy" class="hint" style="margin-top:6px"></div>
       </div>
 
       <div class="field">
         <label for="temperature">Temperature</label>
         <input id="temperature" type="number" step="0.1" min="0" max="2" placeholder="e.g. 0.7" style="max-width:120px" />
-        <div class="hint">Higher = more creative. Some models (e.g., gpt-5) only support the default and ignore custom values.</div>
+        <div class="hint">Higher values make wording more varied, when supported by the selected model.</div>
       </div>
 
       <div class="field">
@@ -55,6 +54,7 @@
       <div class="field">
         <label for="maxTokens">Max tokens</label>
         <input id="maxTokens" type="number" step="1" min="1" placeholder="optional" style="max-width:120px" />
+        <div class="hint">Optional output limit. For reasoning models it includes reasoning tokens as well as visible text; a low limit may prevent a complete reply.</div>
       </div>
 
       <div class="field">
@@ -68,9 +68,15 @@
       </div>
 
       <div class="field">
-        <label for="defaultPrompt">Default/Last Prompt</label>
+        <label for="defaultPrompt">Last instruction</label>
         <textarea id="defaultPrompt" rows="5" style="width:100%; max-width:520px; resize:vertical" placeholder="Optional instruction to apply when generating."></textarea>
-        <div class="hint">Used when clicking the toolbar button (no popup). You can change it here anytime.</div>
+        <div class="hint">Restored in the popup and used by the toolbar fallback. This is separate from your permanent writing preferences.</div>
+      </div>
+
+      <div class="field">
+        <label for="writingPreferences">Writing preferences</label>
+        <textarea id="writingPreferences" rows="4" placeholder="e.g., Use plain language. Avoid generic opening phrases."></textarea>
+        <div class="hint">Applied when generating or improving emails, not to summaries. The optional instruction takes priority. Style and length follow the popup selectors unless your instruction says otherwise.</div>
       </div>
 
       <div class="field">
@@ -91,7 +97,7 @@
             <option value="ar">العربية</option>
           </select>
         </div>
-        <div class="hint">Choose the language the summary should be written in. If set to Auto, the add-on will try to detect the message language. Your Default Prompt will also be taken into account when creating summaries.</div>
+        <div class="hint">Choose the language the summary should be written in. If set to Auto, the add-on will try to detect the message language. Your last instruction will also be taken into account when creating summaries.</div>
       </div>
       <div class="field">
         <label for="summaryStyle">Summary style</label>
@@ -130,16 +136,18 @@
           <span class="btn-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z"/></svg>
           </span>
-          <span>Test API Key</span>
+          <span>Test model</span>
         </button>
-        <span id="status" class="status"></span>
+        <span id="status" class="status" role="status" aria-live="polite"></span>
       </div>
+      <p class="hint">Test model sends a short, fixed test using the key and model shown here. It may incur a small API cost. No email content, instructions or writing preferences are sent, and settings are not saved.</p>
     </div>
     <div class="meta">
       <a class="support-link" href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
       <a href="https://x.com/enriqueite" target="_blank" rel="noreferrer">X @enriqueite</a>
       <a href="https://instagram.com/enriqueite_" target="_blank" rel="noreferrer">@enriqueite_</a>
     </div>
+    <script src="model-config.js"></script>
     <script src="options.js"></script>
   </body>
   </html>

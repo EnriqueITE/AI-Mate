@@ -1,7 +1,79 @@
 // Persist last prompt for convenience
 const LAST_PROMPT_KEY = "lastPrompt";
 const NO_API_KEY_MESSAGE = "No API key set. Click 'Open Settings' to configure.";
+const NO_COMPOSE_MESSAGE = "Open AI-Mate from the compose window you want to change.";
 let composeTabId = null;
+let generationInProgress = false;
+let closeTimer = null;
+let composeActionState = {
+  busy: false,
+  canImprove: false,
+  improveReason: "Checking the current draft...",
+  canUndo: false,
+  undoReason: "Checking the last change..."
+};
+let stateRequest = 0;
+
+function normalizeReplyStyle(value) {
+  return ["natural", "formal", "friendly"].includes(value) ? value : "natural";
+}
+
+function normalizeReplyLength(value) {
+  return ["short", "normal", "detailed"].includes(value) ? value : "normal";
+}
+
+function composePayload(type, fields = {}) {
+  if (!composeTabId) throw new Error(NO_COMPOSE_MESSAGE);
+  const payload = { type, ...fields };
+  payload.tabId = Number(composeTabId);
+  return payload;
+}
+
+function updateComposeControls() {
+  const busy = generationInProgress || composeActionState.busy;
+  for (const id of ["prompt", "replyStyle", "replyLength", "openOptions"]) {
+    document.getElementById(id).disabled = busy;
+  }
+  document.getElementById("generate").disabled = !composeTabId || busy;
+  document.getElementById("improve").disabled = !composeTabId || busy || !composeActionState.canImprove;
+  document.getElementById("undo").disabled = !composeTabId || busy || !composeActionState.canUndo;
+  if (!composeTabId) document.getElementById("summarize").disabled = true;
+  for (const [action, enabled, reason] of [
+    ["improve", composeActionState.canImprove, composeActionState.improveReason],
+    ["undo", composeActionState.canUndo, composeActionState.undoReason]
+  ]) {
+    const explanation = document.getElementById(`${action}Reason`);
+    explanation.textContent = busy ? "Wait for the current change to finish." : (reason || "");
+    explanation.hidden = !busy && !!enabled;
+  }
+}
+
+async function refreshComposeActionState() {
+  const request = ++stateRequest;
+  try {
+    const result = await browser.runtime.sendMessage(composePayload("GET_COMPOSE_ACTION_STATE"));
+    if (!result || !result.ok) throw new Error(result?.error || "The current draft could not be checked. Reopen this popup to try again.");
+    if (request !== stateRequest) return;
+    composeActionState = {
+      busy: !!result.busy,
+      canImprove: result.canImprove === true,
+      improveReason: result.improveReason || "The current draft cannot be improved.",
+      canUndo: result.canUndo === true,
+      undoReason: result.undoReason || "No change is available to undo in this window."
+    };
+  } catch (error) {
+    if (request !== stateRequest) return;
+    composeActionState = {
+      busy: false, canImprove: false, canUndo: false,
+      improveReason: String(error.message || error),
+      undoReason: String(error.message || error)
+    };
+  }
+  updateComposeControls();
+  if (composeActionState.busy && !generationInProgress) {
+    setTimeout(() => refreshComposeActionState(), 750);
+  }
+}
 
 const summarySection = document.getElementById("summarySection");
 const summaryOutput = document.getElementById("summary");
@@ -220,6 +292,10 @@ function toggleSummarizeState(isLoading) {
 }
 
 async function onSummarize() {
+  if (!composeTabId) {
+    showSummaryMessage(NO_COMPOSE_MESSAGE);
+    return;
+  }
   toggleSummarizeState(true);
   try {
     const stored = await browser.storage.local.get({ summaryLanguage: "auto", openaiApiKey: "" });
@@ -242,40 +318,69 @@ async function onSummarize() {
   }
 }
 
-async function onGenerate() {
-  const btn = document.getElementById("generate");
-  const prompt = document.getElementById("prompt").value.trim();
+async function onComposeAction(operation) {
+  if (!composeTabId) return;
+  if (generationInProgress || composeActionState.busy) return;
+  if (operation === "improve" && !composeActionState.canImprove) return;
+  if (operation === "undo" && !composeActionState.canUndo) return;
+  if (closeTimer !== null) {
+    clearTimeout(closeTimer);
+    closeTimer = null;
+  }
+  generationInProgress = true;
+  const isUndo = operation === "undo";
+  const isImprove = operation === "improve";
+  const btn = document.getElementById(isUndo ? "undo" : isImprove ? "improve" : "generate");
+  const promptInput = document.getElementById("prompt");
+  const styleInput = document.getElementById("replyStyle");
+  const lengthInput = document.getElementById("replyLength");
+  const prompt = promptInput.value.trim();
+  const replyStyle = normalizeReplyStyle(styleInput.value);
+  const replyLength = normalizeReplyLength(lengthInput.value);
   const status = document.getElementById("status");
-  const spinner = document.getElementById("genSpinner");
-  clearSummary();
-  btn.disabled = true;
+  const spinner = document.getElementById(isUndo ? "undoSpinner" : isImprove ? "improveSpinner" : "genSpinner");
+  updateComposeControls();
   btn.classList.add("loading");
   spinner.style.display = "inline-block";
   status.className = "status";
-  status.textContent = "Generating reply...";
+  status.textContent = isUndo ? "Undoing the last change..." : isImprove ? "Improving draft..." : "Generating reply...";
   try {
-    const payload = {
-      type: "GENERATE_REPLY",
-      prompt
-    };
-    if (composeTabId) payload.tabId = Number(composeTabId);
+    const payload = isUndo ? composePayload("UNDO_LAST_REPLY") : composePayload("GENERATE_REPLY", {
+      operation, prompt, replyStyle, replyLength
+    });
     const result = await browser.runtime.sendMessage(payload);
     if (!result || !result.ok) {
       throw new Error(result?.error || "Unknown error");
     }
     status.classList.add("ok");
-    status.textContent = "Reply inserted.";
-    await browser.storage.local.set({ [LAST_PROMPT_KEY]: prompt });
-    setTimeout(() => window.close(), 600);
+    const successMessage = isUndo ? "Last change undone." : isImprove ? "Draft improved." : "Reply inserted.";
+    status.textContent = successMessage;
+    if (!isUndo) {
+      try {
+        await browser.storage.local.set({ [LAST_PROMPT_KEY]: prompt, replyStyle, replyLength });
+      } catch {
+        status.textContent = `${successMessage} Your preferences could not be saved.`;
+      }
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        window.close();
+      }, 600);
+    }
   } catch (e) {
     status.classList.add("error");
     status.textContent = `Error: ${e.message || e}`;
   } finally {
-    btn.disabled = false;
     btn.classList.remove("loading");
     spinner.style.display = "none";
+    await refreshComposeActionState();
+    generationInProgress = false;
+    updateComposeControls();
   }
 }
+
+function onGenerate() { return onComposeAction("generate"); }
+function onImprove() { return onComposeAction("improve"); }
+function onUndo() { return onComposeAction("undo"); }
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (document.documentElement) document.documentElement.setAttribute("dir", "rtl");
@@ -283,16 +388,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.body.classList.add("open-left");
     document.body.classList.remove("show-summary");
   }
-  composeTabId = getQueryParam("tabId");
-  if (!composeTabId) {
+  const requestedTabId = getQueryParam("tabId");
+  if (requestedTabId !== null) {
+    const id = Number(requestedTabId);
+    if (/^\d+$/.test(requestedTabId) && Number.isSafeInteger(id) && id > 0) composeTabId = id;
+  } else {
     try {
-      const tabs = await browser.tabs.query({});
-      const t = tabs.find((tb) => tb.type === "messageCompose" && tb.active) || tabs.find((tb) => tb.type === "messageCompose");
-      if (t && t.id) composeTabId = String(t.id);
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const composeTabs = tabs.filter((tab) => tab.type === "messageCompose" && tab.active && Number.isSafeInteger(tab.id) && tab.id > 0);
+      if (composeTabs.length === 1) composeTabId = composeTabs[0].id;
     } catch {}
   }
+  if (!composeTabId) {
+    const status = document.getElementById("status");
+    status.className = "status error";
+    status.textContent = NO_COMPOSE_MESSAGE;
+  }
+  updateComposeControls();
   const generateBtn = document.getElementById("generate");
   if (generateBtn) generateBtn.addEventListener("click", onGenerate);
+  document.getElementById("improve").addEventListener("click", onImprove);
+  document.getElementById("undo").addEventListener("click", onUndo);
   if (summarizeBtn) summarizeBtn.addEventListener("click", onSummarize);
   if (clearSummaryBtn) clearSummaryBtn.addEventListener("click", () => clearSummary(true));
   clearSummary();
@@ -319,14 +435,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   try {
-    const stored = await browser.storage.local.get({ [LAST_PROMPT_KEY]: "", openaiApiKey: "" });
+    const stored = await browser.storage.local.get({ [LAST_PROMPT_KEY]: "", openaiApiKey: "", replyStyle: "natural", replyLength: "normal" });
     document.getElementById("prompt").value = stored[LAST_PROMPT_KEY] || "";
+    document.getElementById("replyStyle").value = normalizeReplyStyle(stored.replyStyle);
+    document.getElementById("replyLength").value = normalizeReplyLength(stored.replyLength);
     if (!stored.openaiApiKey) {
       const warn = document.getElementById("warning");
       warn.classList.add("error");
       warn.textContent = NO_API_KEY_MESSAGE;
     }
   } catch {}
+
+  for (const [id, normalize, label] of [["replyStyle", normalizeReplyStyle, "reply style"], ["replyLength", normalizeReplyLength, "reply length"]]) {
+    const input = document.getElementById(id);
+    input.addEventListener("change", async () => {
+      input.value = normalize(input.value);
+      try {
+        await browser.storage.local.set({ [id]: input.value });
+      } catch {
+        const status = document.getElementById("status");
+        status.className = "status error";
+        status.textContent = `Your ${label} could not be saved. It will still be used for this reply.`;
+      }
+    });
+  }
 
   const ta = document.getElementById("prompt");
   ta.addEventListener("keydown", (e) => {
@@ -335,6 +467,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       onGenerate();
     }
   });
+  await refreshComposeActionState();
 });
 
 

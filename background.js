@@ -1,4 +1,4 @@
-/* global DOMPurify */
+/* global DOMPurify, ReplyCore, ModelConfig */
 /* Background script for AI Reply Assistant */
 
 function sanitizeAiContent(content) {
@@ -24,19 +24,25 @@ async function getSettings() {
     openaiPresencePenalty,
     openaiFrequencyPenalty,
     summaryLanguage,
-    summaryStyle
+    summaryStyle,
+    replyStyle,
+    replyLength,
+    writingPreferences
   } = await browser.storage.local.get({
     openaiApiKey: "",
-    openaiModel: "gpt-4o-mini",
+    openaiModel: ModelConfig.DEFAULT_MODEL,
     openaiTemperature: 0.7,
     openaiTopP: 1,
     openaiMaxTokens: null,
     openaiPresencePenalty: 0,
     openaiFrequencyPenalty: 0,
     summaryLanguage: "auto",
-    summaryStyle: "balanced"
+    summaryStyle: "balanced",
+    replyStyle: "natural",
+    replyLength: "normal",
+    writingPreferences: ""
   });
-  return { openaiApiKey, openaiModel, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty, summaryLanguage, summaryStyle };
+  return { openaiApiKey, openaiModel, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty, summaryLanguage, summaryStyle, replyStyle: ReplyCore.normalizeStyle(replyStyle), replyLength: ReplyCore.normalizeLength(replyLength), writingPreferences: typeof writingPreferences === "string" ? writingPreferences : "" };
 }
 
 const LAST_PROMPT_KEY = "lastPrompt";
@@ -80,42 +86,13 @@ async function notify(title, message) {
 
 function stripHtml(html) {
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html || "", "text/html");
-    return doc.body.textContent || "";
+    return ReplyCore.htmlToText(html);
   } catch (e) {
     // Fallback simple stripper
     return (html || "").replace(/<[^>]+>/g, "");
   }
 }
 
-function textToHtml(text) {
-  // Retained for string-based fallback path only.
-  const esc = (s) => s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-  const cleaned = (text || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/^\s+|\s+$/g, "");
-  return `<span data-ai-reply-text style="display:block;margin:0;padding:0;">${esc(cleaned).replace(/\n/g, "<br>")}</span>`;
-}
-
-function createReplySpan(ownerDoc, text) {
-  const span = ownerDoc.createElement("span");
-  span.setAttribute("data-ai-reply-text", "");
-  span.style.display = "block";
-  span.style.margin = "0";
-  span.style.padding = "0";
-  const cleaned = String(text || "").replace(/\r\n/g, "\n").trim();
-  const parts = cleaned.split("\n");
-  parts.forEach((line, idx) => {
-    span.appendChild(ownerDoc.createTextNode(line));
-    if (idx < parts.length - 1) span.appendChild(ownerDoc.createElement("br"));
-  });
-  return span;
-}
 function normalizeSummaryInput(text) {
   return (text || "")
     .replace(/\r\n/g, "\n")
@@ -176,7 +153,8 @@ function buildSummaryMessages(originalText, userPrompt = "", language = "auto", 
 }
 
 async function summarizeTextContent(originalText, userPrompt = "", language = "auto") {
-  const { openaiApiKey, openaiModel, summaryLanguage, summaryStyle } = await getSettings();
+  const settings = await getSettings();
+  const { openaiApiKey, summaryLanguage, summaryStyle } = settings;
   if (!openaiApiKey) {
     throw new Error("OpenAI API key not set. Configure it in Add-on Options.");
   }
@@ -190,20 +168,8 @@ async function summarizeTextContent(originalText, userPrompt = "", language = "a
   const effectiveLang = (language && language !== "") ? language : (summaryLanguage || "auto");
   const stylePreference = summaryStyle || "balanced";
   const messages = buildSummaryMessages(normalizedText, userPrompt, effectiveLang, stylePreference);
-  const payload = {
-    model: openaiModel || "gpt-4o-mini",
-    messages,
-    temperature: 0.7
-  };
-
-  const resp = await sendChatCompletion(openaiApiKey, payload);
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`OpenAI error ${resp.status}: ${text || resp.statusText}`);
-  }
-
-  const data = await resp.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
+  const payload = ModelConfig.buildPayload(settings, messages);
+  const content = await requestCompletionText(openaiApiKey, payload, "summary");
   const sanitized = sanitizeAiContent(content);
   if (!sanitized) throw new Error("No summary generated");
   return sanitized;
@@ -296,161 +262,185 @@ async function getActiveComposeTabId() {
       const t = focused.tabs.find((tb) => tb.active) || focused.tabs[0];
       if (t && t.id) return t.id;
     }
-    // Any compose window
-    const anyCompose = wins.find((w) => w.type === "messageCompose");
-    if (anyCompose && anyCompose.tabs && anyCompose.tabs.length) {
-      return anyCompose.tabs[0].id;
-    }
   } catch {}
 
-  // Fallback to tabs.query scanning
-  const allTabs = await browser.tabs.query({});
+  // Each compose window has its own active tab. Never pick an arbitrary
+  // active tab from another window when the caller has no explicit tab ID.
+  const allTabs = await browser.tabs.query({ active: true, currentWindow: true });
   const isCompose = (t) => (t && (t.type === "messageCompose" || (t.url && t.url.includes("about:compose"))));
-  let candidate = allTabs.find((t) => isCompose(t) && t.active) || allTabs.find((t) => isCompose(t));
+  const candidate = allTabs.find((t) => isCompose(t));
   if (!candidate) throw new Error("No compose window/tab is currently active.");
   return candidate.id;
 }
 
-async function sendChatCompletion(apiKey, payload) {
-  const makeRequest = async (body) => fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body)
-  });
-  let resp = await makeRequest(payload);
-  if (resp.ok) return resp;
-  if (resp.status === 400) {
-    let errJson = null;
-    try { errJson = await resp.clone().json(); } catch {}
-    const code = errJson?.error?.code || "";
-    if (code === "unsupported_value") {
-      const stripped = { model: payload.model, messages: payload.messages };
-      if (typeof payload.max_tokens !== "undefined") stripped.max_tokens = payload.max_tokens;
-      resp = await makeRequest(stripped);
-      return resp;
-    }
+async function describeOpenAIError(response, model) {
+  // Never surface raw provider bodies: they can echo credentials or email text.
+  let error;
+  try { error = (await response.json())?.error; } catch {}
+  const code = error?.code;
+  const status = response.status;
+  if (status === 401) return "OpenAI rejected the API key. Check the key in Settings.";
+  if (status === 403) return `OpenAI denied access to ${model}. Check your project's model permissions and account access.`;
+  if (status === 404 || code === "model_not_found") return `Model ${model} was not found or is not available to this API key. Check its exact ID and your project's model access.`;
+  if (code === "insufficient_quota" || code === "billing_hard_limit_reached") return "OpenAI API quota or credits are exhausted. Check API billing and project spending limits.";
+  if (status === 429) return "OpenAI is rate limiting requests. Wait a moment and try again.";
+  if (code === "context_length_exceeded") return "The email and requested output exceed this model's context limit. Reduce the input or Max tokens, or choose a model with a larger context.";
+  if (status === 400 && (code === "unsupported_value" || code === "unsupported_parameter")) {
+    const param = typeof error?.param === "string" && /^[a-z_][a-z0-9_.]{0,79}$/i.test(error.param) ? ` (${error.param})` : "";
+    return `Model ${model} rejected a request parameter${param}. Check its Chat Completions compatibility and settings. No model or token limit was changed automatically.`;
   }
-  return resp;
+  if (status >= 500) return "OpenAI is temporarily unavailable. Try again later.";
+  return `OpenAI rejected the request for ${model} (HTTP ${status}). Check the model ID, Chat Completions support and API settings.`;
 }
-async function generateReplyForCompose(tabId, userPrompt) {
-  const { openaiApiKey, openaiModel, openaiTemperature, openaiTopP, openaiMaxTokens, openaiPresencePenalty, openaiFrequencyPenalty } = await getSettings();
-  if (!openaiApiKey) {
-    throw new Error("OpenAI API key not set. Configure it in Add-on Options.");
-  }
 
-  const composeApi = getComposeApi();
-  const details = await composeApi.getComposeDetails(tabId);
-
-  const originalText = details.isPlainText
-    ? (details.plainTextBody || "")
-    : stripHtml(details.body || "");
-
-  // Build chat messages
-  const messages = [
-    {
-      role: "system",
-      content:
-        "You are a helpful email assistant. Draft a clear, polite, and concise reply. " +
-        "Use the same language as the original email. " +
-        "Write only the reply text. Do not include quoted text, signatures, or placeholders. Do not end with generic offers for further help unless the user explicitly requests it."
-    },
-    {
-      role: "user",
-      content:
-        (userPrompt ? `Instruction: ${userPrompt}\n\n` : "") +
-        "Original email content (quoted below in the compose editor):\n\n" +
-        originalText
-    }
-  ];
-
-  // Build payload with conditional params
-  const basePayload = {
-    model: openaiModel || "gpt-4o-mini",
-    messages
-  };
-  const isGpt5 = /(^|\b)gpt-5(\b|$)/i.test(openaiModel || "");
-  if (!isGpt5 && Number.isFinite(openaiTemperature)) basePayload.temperature = openaiTemperature;
-  if (!isGpt5 && Number.isFinite(openaiTopP)) basePayload.top_p = openaiTopP;
-  if (Number.isFinite(openaiMaxTokens)) basePayload.max_tokens = openaiMaxTokens;
-  if (!isGpt5 && Number.isFinite(openaiPresencePenalty)) basePayload.presence_penalty = openaiPresencePenalty;
-  if (!isGpt5 && Number.isFinite(openaiFrequencyPenalty)) basePayload.frequency_penalty = openaiFrequencyPenalty;
-
-  const resp = await sendChatCompletion(openaiApiKey, basePayload);
-
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`OpenAI error ${resp.status}: ${text || resp.statusText}`);
-  }
-
-  const data = await resp.json();
-  const content = data?.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error("No content returned by OpenAI");
-
-  // Insert generated reply at the very top, above signature and quote
-  if (details.isPlainText) {
-    const original = details.plainTextBody || "";
-    const trimmedReply = (content || "").replace(/[\s\n]+$/g, "").replace(/^\s+/, "");
-    const newBody = `${trimmedReply}\n${original.replace(/^\s+/, "")}`;
-    await composeApi.setComposeDetails(tabId, { plainTextBody: newBody });
-  } else {
-    const replyHtml = textToHtml(content);
-    const original = details.body || "";
+async function requestCompletionText(apiKey, payload, purpose = "reply") {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000);
+  try {
+    let response;
     try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(original, "text/html");
-      const container = doc.createElement("div");
-      container.setAttribute("data-ai-reply", "true");
-      container.style.margin = "0";
-      // Append reply content safely without assigning innerHTML
-      container.appendChild(createReplySpan(doc, content));
-      // In reply mode Thunderbird usually wraps the quote in blockquote[type=cite]
-      // and the signature in .moz-signature
-      const signature = doc.querySelector(".moz-signature, #moz-signature, pre.moz-signature, span.moz-signature");
-      const citePrefix = doc.querySelector(".moz-cite-prefix");
-      const quote = doc.querySelector("blockquote");
-      const insertBefore = signature || citePrefix || quote || doc.body.firstChild;
-      doc.body.insertBefore(container, insertBefore);
-
-      // Remove placeholder empty nodes immediately before our container
-      function isEffectivelyEmpty(node) {
-        if (!node) return false;
-        if (node.nodeType === Node.TEXT_NODE) return !node.nodeValue || !node.nodeValue.trim();
-        if (node.nodeType !== Node.ELEMENT_NODE) return false;
-        const tag = node.tagName;
-        if (tag === 'BR' || tag === 'HR') return true;
-        const inner = node.innerHTML.trim();
-        if (inner === '' || /^<br\s*\/?>(?:<br\s*\/?>(?:&nbsp;)?)*$/i.test(inner)) return true;
-        // Empty block elements with only whitespace or &nbsp;
-        const stripped = inner.replace(/&nbsp;|\s|<br\s*\/?>(<!--.*?-->)?/gi, '');
-        return stripped === '';
-      }
-      for (let i = 0; i < 3; i++) {
-        const prev = container.previousSibling;
-        if (isEffectivelyEmpty(prev)) prev.remove(); else break;
-      }
-      let newHtml = doc.body.innerHTML
-        // Trim extra leading empty blocks and breaks
-        .replace(/^\s*(?:<(?:br|hr)\b[^>]*>\s*)+/i, "")
-        .replace(/^\s*(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+/i, "")
-        // Trim extra trailing empty blocks and breaks
-        .replace(/(?:<(?:br|hr)\b[^>]*>\s*)+\s*$/i, "")
-        .replace(/(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+\s*$/i, "");
-      await composeApi.setComposeDetails(tabId, { body: newHtml });
-    } catch (e) {
-      const newHtml = `${replyHtml}${original}`
-        .replace(/^\s*(?:<(?:br|hr)\b[^>]*>\s*)+/i, "")
-        .replace(/^\s*(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+/i, "")
-        .replace(/(?:<(?:br|hr)\b[^>]*>\s*)+\s*$/i, "")
-        .replace(/(?:<(?:p|div)[^>]*>(?:\s|&nbsp;|<br\s*\/?><!--?[^>]*?--?>?)*<\/(?:p|div)>\s*)+\s*$/i, "");
-      await composeApi.setComposeDetails(tabId, { body: newHtml });
+      response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } catch {
+      throw new Error(controller.signal.aborted
+        ? "The OpenAI request timed out. Try again when you are ready."
+        : "Could not reach OpenAI. Check your connection and try again.");
     }
+    if (!response.ok) throw new Error(await describeOpenAIError(response, payload.model));
+    let data;
+    try { data = await response.json(); }
+    catch {
+      throw new Error(controller.signal.aborted ? "The OpenAI request timed out." : "OpenAI returned an unreadable response. Try again.");
+    }
+    const choice = data?.choices?.[0];
+    if (choice?.finish_reason === "length") {
+      if (purpose === "test") throw new Error("The model was reached, but the test token budget was exhausted before a complete answer. Access responded; the generation test is inconclusive.");
+      throw new Error(`OpenAI stopped before finishing the ${purpose}. Increase Max tokens in Settings or request a shorter ${purpose}. The limit includes reasoning tokens on reasoning models.`);
+    }
+    if (choice?.finish_reason !== "stop" || choice?.message?.refusal) {
+      throw new Error(`OpenAI did not return a complete ${purpose === "test" ? "test response" : purpose}. Try again when you are ready.`);
+    }
+    const content = choice?.message?.content;
+    if (typeof content !== "string" || !content.trim()) throw new Error("No text returned by OpenAI. Check that the model supports text output in Chat Completions.");
+    return content.trim();
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
+let modelTestPending = false;
+async function testModel(apiKey, requestedModel) {
+  if (modelTestPending) throw new Error("A model test is already in progress. Wait for it to finish.");
+  modelTestPending = true;
+  try {
+    const key = typeof apiKey === "string" ? apiKey.trim() : "";
+    if (!key) throw new Error("API key is empty. Enter a key before testing the model.");
+    const model = ModelConfig.normalizeModel(requestedModel);
+    const profile = ModelConfig.getProfile(model);
+    // A fixed, bounded access test; never read compose content or stored prompts.
+    const payload = ModelConfig.buildPayload({ openaiModel: model, openaiMaxTokens: profile.sampling ? 64 : 2048 }, [
+      { role: "user", content: "Reply with exactly: OK" }
+    ]);
+    await requestCompletionText(key, payload, "test");
+    return { ok: true, model };
+  } finally {
+    modelTestPending = false;
+  }
+}
+// Draft fragments and reply identities live only in memory for this compose tab.
+const replyRequests = new Map();
+const previousReplies = new Map();
+const undoReplies = new Map();
+browser.tabs.onRemoved.addListener((tabId) => {
+  replyRequests.delete(tabId);
+  previousReplies.delete(tabId);
+  undoReplies.delete(tabId);
+});
+
+function acquireComposeChange(tabId) {
+  if (replyRequests.has(tabId)) throw new Error("A reply is already being generated or another AI-Mate change is in progress in this compose window.");
+  const request = {};
+  replyRequests.set(tabId, request);
+  return request;
+}
+
+async function writeComposeChange(tabId, request, details, update) {
+  const composeApi = getComposeApi();
+  // Compose has no atomic compare-and-set API. Keep this final read/write
+  // interval minimal and never adopt intervening edits as a trusted baseline.
+  const current = await composeApi.getComposeDetails(tabId);
+  if (replyRequests.get(tabId) !== request) throw new Error("The compose window was closed. No change was applied.");
+  if (ReplyCore.snapshot(current) !== ReplyCore.snapshot(details)) {
+    throw new Error("The email changed while AI-Mate was working. Your changes have been kept; try again when you are ready.");
+  }
+  await composeApi.setComposeDetails(tabId, update);
+}
+
+async function generateReplyForCompose(tabId, userPrompt, requestedStyle, requestedLength, operation = "generate") {
+  if (operation !== "generate" && operation !== "improve") throw new Error("Unknown compose operation.");
+  const request = acquireComposeChange(tabId);
+  try {
+    const settings = await getSettings();
+    const { openaiApiKey } = settings;
+    if (!openaiApiKey) throw new Error("OpenAI API key not set. Configure it in Add-on Options.");
+    const composeApi = getComposeApi();
+    const details = await composeApi.getComposeDetails(tabId);
+    const previous = previousReplies.get(tabId) || null;
+    const context = operation === "improve" ? ReplyCore.buildImproveContext(details) : ReplyCore.buildContext(details, previous);
+    const style = requestedStyle === undefined ? settings.replyStyle : ReplyCore.normalizeStyle(requestedStyle);
+    const length = requestedLength === undefined ? settings.replyLength : ReplyCore.normalizeLength(requestedLength);
+    const payload = ModelConfig.buildPayload(settings, ReplyCore.buildMessages(context, userPrompt, style, length, settings.writingPreferences, operation));
+    const content = await requestCompletionText(openaiApiKey, payload);
+    const insertion = operation === "improve"
+      ? ReplyCore.prepareImprovement(details, content, crypto.randomUUID())
+      : ReplyCore.prepareInsertion(details, content, previous, crypto.randomUUID());
+    await writeComposeChange(tabId, request, details, insertion.update);
+    if (replyRequests.get(tabId) === request) {
+      previousReplies.set(tabId, insertion.state);
+      undoReplies.set(tabId, { undo: insertion.undo, previousReply: previous });
+    }
+  } finally {
+    if (replyRequests.get(tabId) === request) replyRequests.delete(tabId);
+  }
+}
+
+async function undoLastReplyForCompose(tabId) {
+  const request = acquireComposeChange(tabId);
+  try {
+    const record = undoReplies.get(tabId);
+    if (!record) throw new Error("There is no AI-Mate change to undo in this compose window.");
+    const details = await getComposeApi().getComposeDetails(tabId);
+    const update = ReplyCore.prepareUndo(details, record.undo);
+    await writeComposeChange(tabId, request, details, update);
+    if (replyRequests.get(tabId) === request) {
+      if (record.previousReply) previousReplies.set(tabId, record.previousReply);
+      else previousReplies.delete(tabId);
+      undoReplies.delete(tabId);
+    }
+  } finally {
+    if (replyRequests.get(tabId) === request) replyRequests.delete(tabId);
+  }
+}
+
+async function getComposeActionState(tabId) {
+  const busyState = { ok: true, busy: true, canImprove: false, improveReason: "Wait for the current AI-Mate change to finish.", canUndo: false, undoReason: "Wait for the current AI-Mate change to finish." };
+  if (replyRequests.has(tabId)) return busyState;
+  const details = await getComposeApi().getComposeDetails(tabId);
+  if (replyRequests.has(tabId)) return busyState;
+  const state = { ok: true, busy: false, canImprove: true, improveReason: "", canUndo: false, undoReason: "There is no AI-Mate change to undo in this compose window." };
+  try { ReplyCore.buildImproveContext(details); }
+  catch (error) { state.canImprove = false; state.improveReason = error.message; }
+  const record = undoReplies.get(tabId);
+  if (record) {
+    try { ReplyCore.prepareUndo(details, record.undo); state.canUndo = true; state.undoReason = ""; }
+    catch (error) { state.undoReason = error.message; }
+  }
+  return state;
+}
 async function summarizeEmailForCompose(tabId, userPrompt = "", language = "") {
   const composeApi = getComposeApi();
   const details = await composeApi.getComposeDetails(tabId);
@@ -515,12 +505,19 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         case "GENERATE_REPLY":
           try {
             const tabId = msg.tabId || (await getActiveComposeTabId());
-            await generateReplyForCompose(tabId, msg.prompt || "");
+            await generateReplyForCompose(tabId, msg.prompt || "", msg.replyStyle, msg.replyLength, msg.operation === undefined ? "generate" : msg.operation);
             return { ok: true };
           } catch (e) {
             console.error('Generate reply error:', e);
             throw e;
           }
+
+        case "UNDO_LAST_REPLY":
+          await undoLastReplyForCompose(msg.tabId || (await getActiveComposeTabId()));
+          return { ok: true };
+
+        case "GET_COMPOSE_ACTION_STATE":
+          return await getComposeActionState(msg.tabId || (await getActiveComposeTabId()));
 
         case "OPEN_OPTIONS":
           try {
@@ -543,6 +540,9 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
           }
           break;
+
+        case "TEST_MODEL":
+          return await testModel(msg.apiKey, msg.model);
 
         case "TEST_API_KEY":
           let key = msg?.apiKey;

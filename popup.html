@@ -9,13 +9,44 @@
     <div class="container">
       <h1>AI Mate Reply</h1>
       <div id="warning" class="status"></div>
+      <div class="reply-controls">
+        <div>
+          <label for="replyStyle">Reply style</label>
+          <select id="replyStyle" aria-describedby="replyStyleHint">
+            <option value="natural" selected>Natural</option>
+            <option value="formal">Formal</option>
+            <option value="friendly">Friendly</option>
+          </select>
+        </div>
+        <div>
+          <label for="replyLength">Length</label>
+          <select id="replyLength">
+            <option value="short">Short</option>
+            <option value="normal" selected>Normal</option>
+            <option value="detailed">Detailed</option>
+          </select>
+        </div>
+      </div>
+      <p id="replyStyleHint" class="hint reply-hint">Includes a greeting, spaced paragraphs and a brief closing.</p>
       <label for="prompt">Optional instruction</label>
       <textarea id="prompt" rows="5" placeholder="e.g., Be friendly and concise; propose times next week."></textarea>
-      <div class="actions">
+      <div class="actions compose-actions">
         <button id="generate">
           <span id="genSpinner" class="spinner" style="display:none"></span>
           <span>Generate Reply</span>
         </button>
+        <button id="improve" class="btn-outlined" aria-describedby="improveReason" disabled>
+          <span id="improveSpinner" class="spinner" style="display:none"></span>
+          <span>Improve Draft</span>
+        </button>
+        <p id="improveReason" class="hint action-reason">Checking the current draft...</p>
+        <button id="undo" class="btn-outlined" aria-describedby="undoReason" disabled>
+          <span id="undoSpinner" class="spinner" style="display:none"></span>
+          <span>Undo last change</span>
+        </button>
+        <p id="undoReason" class="hint action-reason">Checking the last change...</p>
+      </div>
+      <div class="actions secondary-actions">
         <button id="summarize" class="btn-outlined">
           <span id="sumSpinner" class="spinner" style="display:none"></span>
           <span>Summarize Email</span>
@@ -33,6 +64,7 @@
       <div class="link-row">
         <span class="hint">Tip: Enter generates • Shift+Enter inserts a newline.</span>
       </div>
+      <p class="hint reply-hint">Regenerating replaces the previous AI-Mate reply only if it is still untouched.</p>
       <div class="meta">
         <a class="support-link" href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
       </div>

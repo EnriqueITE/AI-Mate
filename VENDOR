@@ -1,0 +1,2 @@
+lib/dompurify.min.js https://unpkg.com/dompurify@3.2.7/dist/purify.min.js
+lib/DOMPurify.LICENSE https://raw.githubusercontent.com/cure53/DOMPurify/3.2.7/LICENSE
