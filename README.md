@@ -110,10 +110,11 @@ Generating, improving, and undoing share a lock per compose window. AI Mate chec
 - Run `./pack.ps1` in PowerShell. The script uses its own directory as the source and outputs `dist/ai-mate-<version>.xpi` there, regardless of the current working directory.
 - Use `./pack.ps1 -OutDir <directory>` to choose another destination. Relative destinations are resolved from the script directory; absolute destinations are used directly.
 - The XPI contains an explicit list of 28 runtime files, icons, the bundled DOMPurify library, licenses, and distribution notices, including the shared model configuration and selection-rewriting modules. Tests, development tools, release notes, and repository metadata are excluded. A completed archive replaces an existing package only after packaging succeeds.
-- Version 1.0.23 produces `dist/ai-mate-1.0.23.xpi`; packaging does not replace archives with other version numbers.
+- Version 1.0.24 produces `dist/ai-mate-1.0.24.xpi`; packaging does not replace archives with other version numbers.
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) contains the release description for the Thunderbird add-on listing. Packaging creates the file locally; it does not upload or publish it.
-- Keep the XPI in ignored `dist/` for submission to the official Thunderbird store. Do not commit installers or attach them to GitHub Releases. Store-ready copy is in [STORE_CHANGELOG_1.0.23.md](STORE_CHANGELOG_1.0.23.md).
+- Keep the XPI in ignored `dist/` for submission to the official Thunderbird store. Do not commit installers or attach them to GitHub Releases. Store-ready copy is in [STORE_CHANGELOG_1.0.24.md](STORE_CHANGELOG_1.0.24.md).
 - Run `python scripts/verify-package.py` after packaging to validate ZIP integrity, the allowlist, referenced scripts and exact source contents. It writes a local checksum report beside the XPI.
+- Run `node scripts/capture-widget.mjs` on Windows with Edge installed to capture six light/dark widget screenshots with offline demonstration data. `EDGE_PATH` can override the Edge executable. Captures remain in ignored `dist/screenshots-<version>/`; native Thunderbird checks run separately.
 
 ## Development checks
 - Use Node.js 24 or newer for the development tools, then run `npm ci` and `npm test`.

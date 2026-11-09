@@ -209,6 +209,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   const pause = () => new Promise(resolve => setTimeout(resolve, 40));
   const wait = async (check, label) => { for(let n=0;n<100;n++){if(check())return;await pause();}throw new Error(label); };
   const e = id => document.getElementById(id);
+  const footerChecks = [];
+  const checkFooter = (state, lastAction) => {
+    const footer = document.querySelector(".support-footer");
+    const content = document.querySelector(".container");
+    const link = footer?.querySelector("a.support-link");
+    if (!link || link.textContent.trim() !== "Buy me a coffee" || link.href !== "https://buymeacoffee.com/enriqueite") throw new Error("Support footer/link missing");
+    const rect = footer.getBoundingClientRect();
+    const linkRect = link.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    if(rect.height <= 0 || rect.top < 0 || rect.bottom > innerHeight + 1 || innerHeight - rect.bottom > 1) throw new Error("Support footer is not visible at the bottom: " + state);
+    if(contentRect.bottom > rect.top + 1) throw new Error("Support footer overlaps scrollable content: " + state);
+    if(linkRect.top < rect.top || linkRect.bottom > rect.bottom || linkRect.left < 0 || linkRect.right > innerWidth) throw new Error("Support link is clipped: " + state);
+    const hit = document.elementFromPoint(linkRect.x + linkRect.width / 2, linkRect.y + linkRect.height / 2);
+    if(!link.contains(hit)) throw new Error("Support link is obscured: " + state);
+    // Scroll the final action into view and ensure the fixed footer cannot hide
+    // it. Restore scroll position so the test still opens at the normal top.
+    const scrollTop = content.scrollTop;
+    const action = e(lastAction);
+    action.scrollIntoView({block:"nearest"});
+    const actionRect = action.getBoundingClientRect();
+    if(actionRect.top < contentRect.top || actionRect.bottom > rect.top + 1) throw new Error("Footer obscures the final action: " + state);
+    content.scrollTop = scrollTop;
+    footerChecks.push({state,top:rect.top,bottom:rect.bottom,linkVisible:true,contentSeparated:true});
+  };
   try {
     const {qaPopupMode:mode} = await browser.storage.local.get("qaPopupMode");
     await wait(() => !e("generate").disabled && (mode !== "rewrite" || (!e("rewriteControls").hidden && !e("rewrite").disabled)), "popup actions unavailable");
@@ -218,15 +242,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     if(innerHeight < 350 || rect.top < 0 || rect.bottom > innerHeight) throw new Error("Toolbar popup clipped: " + JSON.stringify(geometry));
     const settingsRect = e("openOptions").getBoundingClientRect();
     if(settingsRect.top < 0 || settingsRect.bottom > innerHeight || e("openOptions").closest("[hidden]")) throw new Error("Settings is not visible");
+    checkFooter(mode === "rewrite" ? "selected-text" : "no-selection", "summarize");
     if(mode !== "rewrite") {
       if(!e("rewriteControls").hidden) throw new Error("Unexpected selection in original reply mode");
       if(mode === "settings") {
-        await browser.storage.local.set({qaPopupResult:{ok:true,geometry,stages:["settings-visible"]}});
+        await browser.storage.local.set({qaPopupResult:{ok:true,geometry,footerChecks,stages:["settings-visible"]}});
         e("openOptions").click();
       } else {
         e("generate").click();
         await wait(() => e("status").textContent === "Reply inserted.","Generate Reply failed: " + e("status").textContent);
-        await browser.storage.local.set({qaPopupResult:{ok:true,geometry,stages:["generate-reply"]}});
+        await browser.storage.local.set({qaPopupResult:{ok:true,geometry,footerChecks,stages:["generate-reply"]}});
         window.close();
       }
       return;
@@ -236,13 +261,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     await wait(() => !e("rewritePreview").hidden && !e("applyRewrite").disabled,"no native preview");
     if (!e("rewriteOriginal").textContent || e("rewriteResult").textContent!=="Rewritten selection.") throw new Error("incorrect preview");
     if(e("openOptions").closest("[hidden]")) throw new Error("Settings disappeared during preview");
+    checkFooter("rewrite-preview", "cancelRewrite");
     e("regenerateRewrite").click();
     await wait(() => !e("regenerateRewrite").disabled,"regeneration stuck");
     e("applyRewrite").click();
     await wait(() => e("rewritePreview").hidden && !e("undo").disabled,"native apply or undo state failed: "+e("status").textContent);
     e("undo").click();
     await wait(() => e("status").textContent === "Last change undone.","native undo button failed: "+e("status").textContent);
-    await browser.storage.local.set({qaPopupResult:{ok:true,geometry,stages:["preview","regenerate","replace","undo"]}});
+    checkFooter("after-undo", "summarize");
+    await browser.storage.local.set({qaPopupResult:{ok:true,geometry,footerChecks,stages:["preview","regenerate","replace","undo"]}});
     window.close();
   } catch(error) {await browser.storage.local.set({qaPopupResult:{ok:false,error:String(error)}});}
 });

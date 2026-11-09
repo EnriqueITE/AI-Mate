@@ -1,3 +1,12 @@
+# Version 1.0.24 — visible support footer and screenshots, November 9, 2026
+
+- 150/150 automated tests and runtime syntax checks pass. No dependencies or AI request behavior changed.
+- Native Thunderbird 159.0 checks use the actual toolbar popup in an isolated headless profile. The popup remains 400 × 600 CSS pixels. The footer stays at y=563–600 in normal, selected-text, preview and post-undo states; its link is visible and hit-test accessible, content does not overlap it, and lower actions remain reachable by scrolling. HTML/plain-text editing and existing actions pass with 13 simulated requests. Report: `dist/qa-1.0.24-20261109-200827/report.json`.
+- `node scripts/capture-widget.mjs` renders the shipped HTML, CSS and JavaScript in isolated Edge with offline demonstration data. Six visually inspected PNGs at 800 × 1200 pixels cover reply, selection and preview in light/dark themes. These are widget screenshots, not native Thunderbird-window captures or real model responses. Files: `dist/screenshots-1.0.24/`; store ZIP: `dist/ai-mate-1.0.24-screenshots.zip`.
+- The local XPI is validated using `python scripts/verify-package.py`. Screenshots, profiles, ZIPs and XPI files are excluded from GitHub; only source, tests and documentation are published. No live API calls or Thunderbird 115 runtime tests were performed.
+
+---
+
 # Version 1.0.23 — toolbar popup regression, November 9, 2026
 
 The previous native checks opened the extension page in a separately sized window. They did not detect the toolbar popup's circular height constraint. A new test uses `browser.composeAction.openPopup({windowId})`, without an explicit size or tab-ID query parameter, and checks the actual viewport and button bounds.
