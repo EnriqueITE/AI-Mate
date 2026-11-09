@@ -50,7 +50,7 @@ function updateModelUi() {
   document.getElementById("customModelRow").hidden = !custom;
   const raw = selectedModelValue();
   const model = ModelConfig.MODELS.find((entry) => entry.id === raw);
-  document.getElementById("modelDescription").textContent = model?.description || "Enter the exact OpenAI model ID. Availability depends on your account; use Test model to check access.";
+  document.getElementById("modelDescription").textContent = ModelConfig.modelNotice(raw) || model?.description || "Enter the exact OpenAI model ID. Availability depends on your account; use Test model to check access.";
   toggleAdvancedForModel(raw);
   showModelValidation();
 }

@@ -84,14 +84,14 @@ test("invalid stored writing preferences are ignored and storage errors are repo
   } finally { options.dom.window.close(); }
 });
 
-test("model options come from the shared catalog and keep the existing default without saving", async () => {
+test("model options come from the shared catalog and use Luna for new installs without saving", async () => {
   const options = await createOptions();
   try {
     const ids = Array.from(options.element("model").options).map(option => option.value);
-    for (const id of ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "gpt-3.5-turbo"]) assert.ok(ids.includes(id), id);
+    for (const id of ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]) assert.ok(ids.includes(id), id);
     assert.equal(ids.length, options.window.ModelConfig.MODELS.length + 1);
     assert.equal(options.element("model").value, options.window.ModelConfig.DEFAULT_MODEL);
-    assert.equal(options.element("model").value, "gpt-4o-mini");
+    assert.equal(options.element("model").value, "gpt-6-luna");
     assert.equal(options.element("temperature").value, "0.7");
     assert.equal(options.writes.length, 0);
     assert.equal(options.messages.length, 0);
@@ -114,6 +114,21 @@ test("a saved unknown model ID and its parameter values survive loading and savi
     assert.equal(options.data.openaiPresencePenalty, -0.4);
     assert.equal(options.data.openaiFrequencyPenalty, 0.9);
   } finally { options.dom.window.close(); }
+});
+
+test("upgrades retain legacy and retired model selections with their output limits", async () => {
+  for (const model of ["gpt-4o-mini", "gpt-3.5-turbo"]) {
+    const app = await createOptions({ openaiModel: model, openaiMaxTokens: 1234 });
+    try {
+      assert.equal(app.window.readSelectedModel(), model);
+      if (model === "gpt-3.5-turbo") {
+        assert.match(app.element("modelDescription").textContent, /retired/);
+        assert.ok(!Array.from(app.element("model").options).some((option) => option.value === model));
+      }
+      await app.window.save();
+      assert.equal(app.data.openaiModel, model); assert.equal(app.data.openaiMaxTokens, 1234);
+    } finally { app.dom.window.close(); }
+  }
 });
 
 test("changing model only changes supported controls, preserving values until defaults are explicitly chosen", async () => {
@@ -220,7 +235,7 @@ test("Test model refuses an absent key and does not claim success for a stale se
     const options = await createOptions({ openaiApiKey: "fake-key" }, false, { sendMessage: () => request });
     try {
       const pending = options.window.testModel();
-      options.element(changedId).value = changedId === "model" ? "gpt-6-luna" : "another-fake-key";
+      options.element(changedId).value = changedId === "model" ? "gpt-6.1-terra" : "another-fake-key";
       resolveRequest({ ok: true, model: "gpt-4o-mini" });
       await pending;
       assert.match(options.element("status").textContent, /changed.*Test the current selection again/);

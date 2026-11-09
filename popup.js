@@ -4,6 +4,7 @@ const NO_API_KEY_MESSAGE = "No API key set. Click 'Open Settings' to configure."
 const NO_COMPOSE_MESSAGE = "Open AI-Mate from the compose window you want to change.";
 let composeTabId = null;
 let generationInProgress = false;
+let summaryInProgress = false;
 let closeTimer = null;
 let composeActionState = {
   busy: false,
@@ -37,7 +38,7 @@ function updateComposeControls() {
   document.getElementById("generate").disabled = !composeTabId || busy;
   document.getElementById("improve").disabled = !composeTabId || busy || !composeActionState.canImprove;
   document.getElementById("undo").disabled = !composeTabId || busy || !composeActionState.canUndo;
-  if (!composeTabId) document.getElementById("summarize").disabled = true;
+  document.getElementById("summarize").disabled = !composeTabId || busy || summaryInProgress;
   for (const [action, enabled, reason] of [
     ["improve", composeActionState.canImprove, composeActionState.improveReason],
     ["undo", composeActionState.canUndo, composeActionState.undoReason]
@@ -46,6 +47,7 @@ function updateComposeControls() {
     explanation.textContent = busy ? "Wait for the current change to finish." : (reason || "");
     explanation.hidden = !busy && !!enabled;
   }
+  if (typeof updateRewriteControls === "function") updateRewriteControls();
 }
 
 async function refreshComposeActionState() {
@@ -59,7 +61,9 @@ async function refreshComposeActionState() {
       canImprove: result.canImprove === true,
       improveReason: result.improveReason || "The current draft cannot be improved.",
       canUndo: result.canUndo === true,
-      undoReason: result.undoReason || "No change is available to undo in this window."
+      undoReason: result.undoReason || "No change is available to undo in this window.",
+      canRewrite: result.canRewrite === true,
+      rewriteReason: result.rewriteReason || "Select text in your email to rewrite it.", token: result.token
     };
   } catch (error) {
     if (request !== stateRequest) return;
@@ -73,6 +77,7 @@ async function refreshComposeActionState() {
   if (composeActionState.busy && !generationInProgress) {
     setTimeout(() => refreshComposeActionState(), 750);
   }
+  if (typeof refreshRewriteLease === "function") refreshRewriteLease();
 }
 
 const summarySection = document.getElementById("summarySection");
@@ -232,6 +237,8 @@ function replaceSummaryContent(target, markup) {
     target.replaceChildren();
     return;
   }
+  if (typeof DOMPurify === "undefined" || typeof DOMPurify.sanitize !== "function") throw new Error("The summary sanitizer is unavailable. Reload AI Mate.");
+  markup = DOMPurify.sanitize(markup);
   const parser = new DOMParser();
   const doc = parser.parseFromString(`<div>${markup}</div>`, "text/html");
   const fragment = document.createDocumentFragment();
@@ -282,13 +289,14 @@ function renderSummary(text, isError = false) {
   if (clearSummaryBtn) clearSummaryBtn.disabled = false;
 }
 function toggleSummarizeState(isLoading) {
+  summaryInProgress = isLoading;
   if (summarizeBtn) {
-    summarizeBtn.disabled = isLoading;
     summarizeBtn.classList.toggle("loading", isLoading);
   }
   if (sumSpinner) {
     sumSpinner.style.display = isLoading ? "inline-block" : "none";
   }
+  updateComposeControls();
 }
 
 async function onSummarize() {
@@ -319,6 +327,7 @@ async function onSummarize() {
 }
 
 async function onComposeAction(operation) {
+  if (typeof rewriteBusy !== "undefined" && (rewriteBusy || rewriteText)) return;
   if (!composeTabId) return;
   if (generationInProgress || composeActionState.busy) return;
   if (operation === "improve" && !composeActionState.canImprove) return;
@@ -383,9 +392,7 @@ function onImprove() { return onComposeAction("improve"); }
 function onUndo() { return onComposeAction("undo"); }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  if (document.documentElement) document.documentElement.setAttribute("dir", "rtl");
   if (document.body) {
-    document.body.classList.add("open-left");
     document.body.classList.remove("show-summary");
   }
   const requestedTabId = getQueryParam("tabId");

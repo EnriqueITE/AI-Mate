@@ -3,6 +3,7 @@
 AI Mate adds OpenAI powered assistance to Thunderbird. It drafts replies directly in the compose window and summarizes messages from the compose and reader toolbars. Settings are stored in your Thunderbird profile; the selected email content is sent to OpenAI when you use an AI feature.
 
 ## Features
+- **Rewrite selection** appears when text is selected in a compose editor. Choose Paraphrase, Formal, Direct, Friendly, Shorter, or More detailed; review a preview before replacing only that fragment. Copy, regenerate, cancel, and undo are available.
 - **Compose reply** button with **Natural**, **Formal**, and **Friendly** styles. Natural is the default, and the add-on remembers your choice.
 - **Reply length** choices: **Short**, **Normal**, and **Detailed**. Normal is the default. Length guides how much the reply develops the available information; it does not cut text to a fixed size.
 - **Structured replies** with a greeting, readable paragraphs, and an appropriate closing, while preserving the existing signature and quoted message.
@@ -20,14 +21,18 @@ AI Mate adds OpenAI powered assistance to Thunderbird. It drafts replies directl
 - Thunderbird 115 or newer.
 - An active OpenAI API key (create one at <https://platform.openai.com/api-keys>).
 
-## Installation (temporary testing)
+## Install from the official store
+
+Get AI Mate from the [official Thunderbird Add-ons store](https://addons.thunderbird.net/es/thunderbird/addon/ai-mate/). GitHub hosts source code only; XPI installers are not published in the repository or GitHub Releases.
+
+## Installation (developer testing)
 1. Open Thunderbird and navigate to Tools > Developer Tools > Debug Add-ons (or visit `about:debugging#/runtime/this-thunderbird`).
 2. Click **Load Temporary Add-on** and choose the `manifest.json` file inside this repository.
 3. The add-on will be available until Thunderbird is closed.
 
 ## Initial Setup
 1. Go to Thunderbird > Add-ons and Themes > Extensions > AI Mate > Preferences (or use the add-on gear menu to open options).
-2. Enter your OpenAI API key, pick a model, and adjust any optional parameters. New installations use `gpt-4o-mini`; upgrading keeps your current model.
+2. Enter your OpenAI API key, pick a model, and adjust any optional parameters. New installations use `gpt-6-luna`; upgrading keeps your current model and limits.
 3. (Optional) Click **Test model** before saving. It uses the key and model currently entered, including unsaved changes, and makes a small paid API request with a fixed short diagnostic instruction. A successful result confirms that the model responded to that request; it does not evaluate email-writing quality. Testing does not save your settings.
 4. (Optional) Add **Writing preferences** for reusable guidance, such as preferred wording or how to address the reader. These apply to generation and improvement, not summaries.
 5. (Optional) Enable **message display summaries** if you want the reader toolbar button to send currently viewed messages to OpenAI. You can separately opt in to start summarizing automatically when the summary popup opens.
@@ -35,13 +40,23 @@ AI Mate adds OpenAI powered assistance to Thunderbird. It drafts replies directl
 
 ### Models and Parameters
 
-The selector includes `gpt-6-luna`, `gpt-6.1-sol`, and `gpt-6-astra` alongside the existing `gpt-5`, `gpt-4o-mini`, `gpt-4o`, `gpt-4.1-mini`, `gpt-4.1`, and `gpt-3.5-turbo` entries. Choose **Other model** to enter an exact model ID, including an ID already stored by an earlier installation. A listed model is a selectable option, not a guarantee of access for your API account or a writing-quality recommendation. OpenAI documents the added model IDs at [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra).
+The current selector includes [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), [GPT-6.1 Terra](https://developers.openai.com/api/docs/models/gpt-6.1-terra), [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra). Earlier supported choices are labelled deprecated. GPT-3.5 Turbo is retired and is no longer offered as a new choice. Previously saved retired or custom IDs remain visible under **Other model**, with a retirement notice where applicable; they are never silently replaced. Account access and writing quality must be checked with your own API account. Status labels were checked against [OpenAI's catalog](https://developers.openai.com/api/docs/models/all) on November 9, 2026.
 
 Generation, draft improvement, and both summary actions share the same model and parameter handling. AI Mate disables sampling controls it cannot safely apply to the selected model and omits those parameters from requests. The **Max tokens** control remains available. For modern models this cap uses `max_completion_tokens`, which includes hidden reasoning tokens as well as visible output; a small cap may therefore leave little or no visible text. See the [Chat Completions API reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
 
 The add-on keeps the model ID you selected. An API failure does not silently select another model or remove a configured token cap. Test model can help identify access or configuration failures without sending a draft; generating an email still requires review of the resulting text.
 
 ## Using AI Mate
+
+### Rewrite Selected Text
+1. Select text in the body of a compose or reply window, then open AI Mate.
+2. Choose a rewrite style. Expand **Optional rewrite instruction** to add guidance specific to this selection. This instruction starts empty and is not saved.
+3. Click **Rewrite selection**. Review the original fragment and its replacement; **Regenerate**, **Copy**, or **Cancel** as needed.
+4. Click **Replace selection** to apply it. **Undo last change** restores the original fragment and formatting if the affected nodes are still intact.
+
+Only the selected text, its link destinations, chosen style and rewrite instruction are sent for this action. Saved writing preferences, the last reply prompt, subject, recipients and unselected email text are not included. The result is plain text with paragraphs, inheriting editor typography. Link destinations must be retained literally. Only the style is saved.
+
+Empty selections, selections above 60,000 characters, and selections intersecting images, tables, recognizable signatures or quoted messages are rejected locally. If the body or format changes after capture, replacement is refused. Undo preserves unrelated outside edits but conservatively refuses edits to the same affected nodes or their formatting. Closing the popup invalidates its pending preview; closing the compose window or restarting the add-on discards its temporary range and undo information. The interface remains in English.
 
 ### Generate Replies
 1. Open a message reply or compose window with the original email quoted.
@@ -94,9 +109,11 @@ Generating, improving, and undoing share a lock per compose window. AI Mate chec
 ## Packaging for Release
 - Run `./pack.ps1` in PowerShell. The script uses its own directory as the source and outputs `dist/ai-mate-<version>.xpi` there, regardless of the current working directory.
 - Use `./pack.ps1 -OutDir <directory>` to choose another destination. Relative destinations are resolved from the script directory; absolute destinations are used directly.
-- The XPI contains an explicit list of 25 runtime files, icons, the bundled DOMPurify library, licenses, and distribution notices, including the shared `model-config.js` module. Tests, development tools, release notes, and repository metadata are excluded. A completed archive replaces an existing package only after packaging succeeds.
-- Version 1.0.21 produces `dist/ai-mate-1.0.21.xpi`; the previous 1.0.20 and 1.0.19 XPIs are retained.
+- The XPI contains an explicit list of 28 runtime files, icons, the bundled DOMPurify library, licenses, and distribution notices, including the shared model configuration and selection-rewriting modules. Tests, development tools, release notes, and repository metadata are excluded. A completed archive replaces an existing package only after packaging succeeds.
+- Version 1.0.23 produces `dist/ai-mate-1.0.23.xpi`; packaging does not replace archives with other version numbers.
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) contains the release description for the Thunderbird add-on listing. Packaging creates the file locally; it does not upload or publish it.
+- Keep the XPI in ignored `dist/` for submission to the official Thunderbird store. Do not commit installers or attach them to GitHub Releases. Store-ready copy is in [STORE_CHANGELOG_1.0.23.md](STORE_CHANGELOG_1.0.23.md).
+- Run `python scripts/verify-package.py` after packaging to validate ZIP integrity, the allowlist, referenced scripts and exact source contents. It writes a local checksum report beside the XPI.
 
 ## Development checks
 - Use Node.js 24 or newer for the development tools, then run `npm ci` and `npm test`.
@@ -111,4 +128,4 @@ Generating, improving, and undoing share a lock per compose window. AI Mate chec
 ## License
 AI Mate is free software licensed under the GNU General Public License v3.0 or later. See [LICENSE](LICENSE) for the standard GPL terms and [NOTICE](NOTICE) for the project copyright notice.
 
-The bundled DOMPurify 3.2.7 library retains its upstream Apache 2.0 or MPL 2.0 license. The complete upstream license is included in [lib/DOMPurify.LICENSE](lib/DOMPurify.LICENSE); [VENDOR](VENDOR) records the distribution and license sources.
+The bundled DOMPurify 3.4.17 library retains its upstream notices. The license file distributed with that tag is included unchanged in [lib/DOMPurify.LICENSE](lib/DOMPurify.LICENSE); [VENDOR](VENDOR) records the exact distribution and license sources.

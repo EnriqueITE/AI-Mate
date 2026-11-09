@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
 const { JSDOM } = require("jsdom");
+const RewriteCore = require("../rewrite-core.js");
+const DOMPurify = require("../lib/dompurify.min.js")(new JSDOM("").window);
 global.DOMParser = new JSDOM("").window.DOMParser;
 const core = require("../reply-core.js");
 const modelConfig = require("../model-config.js");
@@ -36,11 +38,13 @@ function harness(options = {}) {
         tabs.set(id, details);
       }
     },
-    tabs: { query: async (query) => { if (options.queryTabs) return options.queryTabs(query); return []; }, onRemoved: { addListener: (listener) => { removedListener = listener; } } },
+    tabs: { get: async (id) => ({ id, type: options.tabType || "messageCompose" }),
+      sendMessage: async (id, message) => { if (options.selection) return options.selection(id, message); throw new Error("No selection"); },
+      query: async (query) => { if (options.queryTabs) return options.queryTabs(query); return []; }, onRemoved: { addListener: (listener) => { removedListener = listener; } } },
     windows: { getAll: async () => options.windows || [] },
-    runtime: { onMessage: { addListener: (listener) => { messageListener = listener; } } }
+    runtime: { id: "ai-mate@test", getURL: (file) => `moz-extension://test/${file}`, onMessage: { addListener: (listener) => { messageListener = listener; } } }
   };
-  const sandbox = vm.createContext({ browser, ReplyCore: core, ModelConfig: modelConfig, crypto, AbortController,
+  const sandbox = vm.createContext({ browser, ReplyCore: core, ModelConfig: modelConfig, RewriteCore, DOMPurify, crypto, AbortController,
     setTimeout: options.timeout ? (callback) => setTimeout(callback, 1) : setTimeout, clearTimeout,
     console: { warn() {}, error() {} }, fetch: async (_url, request) => {
     requests.push({ url: _url, ...request });
@@ -50,11 +54,12 @@ function harness(options = {}) {
   } });
   vm.runInContext(source, sandbox);
   return {
-    request: (extra = {}) => new Promise((resolve) => messageListener({ type: "GENERATE_REPLY", tabId: 42, prompt: "Reply in English", ...extra }, {}, resolve)),
+    request: (extra = {}, sender) => new Promise((resolve) => messageListener({ type: "GENERATE_REPLY", tabId: 42, prompt: "Reply in English", ...extra }, sender || { id: "ai-mate@test", url: `moz-extension://test/${["TEST_MODEL", "TEST_API_KEY"].includes(extra.type) ? "options" : "popup"}.html` }, resolve)),
     close: (id = 42) => removedListener(id),
     change: (change, id = 42) => { tabs.set(id, { ...current(id), ...change }); },
     details: (id = 42) => structuredClone(current(id)), updates, payloads, requests,
-    failWrites: (message = "") => { options.setError = message; }
+    failWrites: (message = "") => { options.setError = message; },
+    sandbox
   };
 }
 
@@ -72,6 +77,87 @@ test("generation uses style preference, sends structured context, and replaces i
     assert.equal(app.updates.length, 2);
     assert.equal(app.details().plainTextBody.split(answer).length - 1, 1);
   }
+});
+
+test("untrusted senders, wrong pages and non-compose targets never reach OpenAI", async () => {
+  for (const sender of [{}, { id: "other", url: "moz-extension://test/popup.html" }, { id: "ai-mate@test", url: "https://hostile.test/popup.html" }, { id: "ai-mate@test", url: "moz-extension://test/options.html" }]) {
+    const app = harness();
+    assert.equal((await app.request({}, sender)).ok, false);
+    assert.equal(app.requests.length, 0); assert.equal(app.updates.length, 0);
+  }
+  for (const tabId of [-1, 0, "42", 1.5]) {
+    const app = harness(); assert.equal((await app.request({ tabId })).ok, false); assert.equal(app.requests.length, 0);
+  }
+  const app = harness({ tabType: "mail" });
+  assert.equal((await app.request()).ok, false); assert.equal(app.requests.length, 0);
+});
+
+test("rewriting previews selected data only, applies server-held output once and shares undo", async () => {
+  const commands = [];
+  const app = harness({ selection: async (id, message) => {
+    commands.push({ id, ...message });
+    if (["verify", "state"].includes(message.command)) return { ok: true, canRewrite: true, token: "range", text: "Only selected text", links: [] };
+    if (message.command === "apply") return { ok: true, undoToken: "undo-range" };
+    return { ok: true, canUndo: true };
+  }, settings: { writingPreferences: "PRIVATE PREFERENCES" }, details: { subject: "PRIVATE SUBJECT", plainTextBody: "PRIVATE UNSELECTED BODY" } });
+  const preview = await app.request({ type: "REWRITE_SELECTION", token: "range", style: "direct", instruction: "Clear wording" });
+  assert.equal(preview.ok, true); assert.equal(preview.original, "Only selected text");
+  assert.equal(app.updates.length, 0); assert.equal(commands.filter((c) => c.command === "apply").length, 0);
+  assert.equal(app.payloads[0].store, false);
+  assert.doesNotMatch(JSON.stringify(app.payloads[0]), /PRIVATE|ada@example|Reply in English/);
+  assert.equal((await app.request({ type: "APPLY_REWRITE", token: "range", text: "Forged client output" })).ok, true);
+  assert.equal(commands.find((c) => c.command === "apply").text, answer);
+  assert.equal((await app.request({ type: "APPLY_REWRITE", token: "range" })).ok, false);
+  assert.equal((await app.request({ type: "UNDO_LAST_REPLY" })).ok, true);
+  assert.equal(commands.at(-1).command, "undo"); assert.equal(commands.at(-1).token, "undo-range");
+});
+
+test("cancel, close, concurrent actions and stale selection never apply a pending rewrite", async () => {
+  for (const outcome of ["cancel", "close", "stale"]) {
+    const pending = deferred(), entered = deferred(); let stale = false, applies = 0;
+    const app = harness({ selection: async (_id, message) => {
+      if (message.command === "apply") applies++;
+      return stale ? { ok: false, error: "Selection changed" } : { ok: true, token: "range", text: "Selected", links: [] };
+    }, fetch: async () => { entered.resolve(); return pending.promise; } });
+    const first = app.request({ type: "REWRITE_SELECTION", token: "range" });
+    await entered.promise;
+    assert.equal((await app.request()).ok, false);
+    assert.equal((await app.request({ type: "UNDO_LAST_REPLY" })).ok, false);
+    if (outcome === "cancel") await app.request({ type: "DISCARD_REWRITE", token: "range" });
+    else if (outcome === "close") app.close();
+    else stale = true;
+    pending.resolve({ ok: true, json: async () => ({ choices: [{ finish_reason: "stop", message: { content: answer } }] }) });
+    assert.equal((await first).ok, false);
+    assert.equal((await app.request({ type: "APPLY_REWRITE", token: "range" })).ok, false);
+    assert.equal(applies, 0); assert.equal(app.requests.length, 1);
+  }
+});
+
+test("invalid and oversized selections are rejected before a network request", async () => {
+  for (const text of ["", " ", "a".repeat(60001)]) {
+    const app = harness({ selection: async () => ({ ok: true, token: "range", text, links: [] }) });
+    assert.equal((await app.request({ type: "REWRITE_SELECTION", token: "range" })).ok, false);
+    assert.equal(app.requests.length, 0);
+  }
+});
+
+test("summary extraction skips named and attached MIME parts and prefers plain alternatives", () => {
+  const app = harness();
+  const mime = { contentType: "multipart/mixed", parts: [
+    { contentType: "multipart/alternative", parts: [{ contentType: "text/plain", body: "Inline only" }, { contentType: "text/html", body: "<p>Duplicate HTML</p>" }] },
+    { contentType: "text/plain", name: "secret.txt", body: "ATTACHMENT" },
+    { contentType: "text/plain", headers: { "content-disposition": ["attachment"] }, body: "UNNAMED ATTACHMENT" },
+    { contentType: "message/rfc822", parts: [{ contentType: "text/plain", body: "ATTACHED EMAIL" }] }
+  ] };
+  assert.equal(app.sandbox.extractPlainTextFromPayload(mime), "Inline only");
+  assert.doesNotMatch(source, /messagesApi\.getRaw|messagesApi\.getBody/);
+});
+
+test("sanitizer failures stop summary rendering rather than returning unsanitized content", () => {
+  const app = harness(); app.sandbox.DOMPurify = undefined;
+  assert.throws(() => app.sandbox.sanitizeAiContent('<img src=x onerror="alert(1)">'), /displayed safely/);
+  app.sandbox.DOMPurify = { sanitize() { throw new Error("fixture failure"); } };
+  assert.throws(() => app.sandbox.sanitizeAiContent("text"), /displayed safely/);
 });
 
 test("explicit reply style overrides saved style and unknown styles default naturally", async () => {
@@ -491,6 +577,7 @@ test("Test model uses unsaved inputs and a bounded fixed prompt, without any ema
     assert.equal(app.requests[0].url, "https://api.openai.com/v1/chat/completions");
     assert.equal(app.requests[0].headers.Authorization, "Bearer unsaved-offline-key");
     assert.deepEqual(app.payloads[0], {
+      store: false,
       model, max_completion_tokens: model === "gpt-4o-mini" ? 64 : 2048,
       messages: [{ role: "user", content: "Reply with exactly: OK" }]
     });

@@ -41,7 +41,8 @@
   function nodeText(node) {
     if (node.nodeType === 3) return node.nodeValue || "";
     if (node.nodeType !== 1 && node.nodeType !== 9 && node.nodeType !== 11) return "";
-    if (["SCRIPT", "STYLE", "NOSCRIPT", "HEAD"].includes(node.nodeName)) return "";
+    if (["SCRIPT", "STYLE", "NOSCRIPT", "HEAD", "TEMPLATE"].includes(node.nodeName)) return "";
+    if (node.nodeType === 1 && (node.hidden || node.getAttribute("aria-hidden") === "true" || node.style?.display === "none" || ["hidden", "collapse"].includes(node.style?.visibility))) return "";
     if (node.nodeName === "BR") return "\n";
     const content = Array.from(node.childNodes).map(nodeText).join("");
     const isBlock = BLOCK_TAGS.has(node.nodeName) || (node.style && node.style.display === "block");

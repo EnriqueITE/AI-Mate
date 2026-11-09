@@ -7,8 +7,47 @@
   </head>
   <body>
     <div class="container">
-      <h1>AI Mate Reply</h1>
+      <header class="popup-header">
+        <h1>AI Mate Reply</h1>
+        <button id="openOptions" class="btn-outlined" type="button">Open Settings</button>
+      </header>
       <div id="warning" class="status"></div>
+      <section id="rewriteSection" class="rewrite-section" aria-label="Rewrite selection">
+        <p id="rewriteReason" class="hint">Select text in your email to rewrite it.</p>
+        <div id="rewriteControls" hidden>
+          <label for="rewriteStyle">Rewrite style</label>
+          <div class="rewrite-toolbar">
+          <select id="rewriteStyle">
+            <option value="paraphrase">Paraphrase</option>
+            <option value="formal">Formal</option>
+            <option value="direct">Direct</option>
+            <option value="friendly">Friendly</option>
+            <option value="shorter">Shorter</option>
+            <option value="detailed">More detailed</option>
+          </select>
+          <button id="rewrite" type="button">Rewrite selection</button>
+          </div>
+          <details class="rewrite-instructions">
+            <summary>Optional rewrite instruction</summary>
+            <label for="rewriteInstruction">Instruction for this selection</label>
+            <textarea id="rewriteInstruction" rows="2" maxlength="4000" placeholder="Applies only to this selection; not saved."></textarea>
+          </details>
+          <p class="hint">Only the selected text, its links and this instruction are sent.</p>
+        </div>
+        <div id="rewritePreview" hidden>
+          <h2>Original selection</h2>
+          <div id="rewriteOriginal" class="rewrite-output"></div>
+          <h2>Rewrite preview</h2>
+          <div id="rewriteResult" class="rewrite-output" aria-live="polite"></div>
+          <div class="actions rewrite-actions">
+            <button id="applyRewrite" type="button">Replace selection</button>
+            <button id="regenerateRewrite" class="btn-outlined" type="button">Regenerate</button>
+            <button id="copyRewrite" class="btn-outlined" type="button">Copy</button>
+            <button id="cancelRewrite" class="btn-outlined" type="button">Cancel</button>
+          </div>
+        </div>
+      </section>
+      <div id="draftControls">
       <div class="reply-controls">
         <div>
           <label for="replyStyle">Reply style</label>
@@ -51,7 +90,7 @@
           <span id="sumSpinner" class="spinner" style="display:none"></span>
           <span>Summarize Email</span>
         </button>
-        <button id="openOptions" class="btn-outlined">Open Settings</button>
+      </div>
       </div>
       <div id="status" class="status" role="status"></div>
       <div id="summarySection" class="summary-section" hidden>
@@ -69,7 +108,10 @@
         <a class="support-link" href="https://buymeacoffee.com/enriqueite" target="_blank" rel="noreferrer">Buy me a coffee</a>
       </div>
     </div>
+    <script src="lib/dompurify.min.js"></script>
+    <script src="rewrite-core.js"></script>
     <script src="popup.js"></script>
+    <script src="rewrite-popup.js"></script>
   </body>
   </html>
 

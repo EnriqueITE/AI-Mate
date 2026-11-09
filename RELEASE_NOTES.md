@@ -1,4 +1,23 @@
-# AI Mate 1.0.21
+# AI Mate 1.0.23
+
+- Fix the compose toolbar popup collapsing to a narrow strip. Let Thunderbird measure intrinsic content height, with a 400 px width and a fixed 600 px scrolling limit instead of a viewport-dependent inner container.
+- Keep Open Settings in the header, including while reviewing a rewrite. Compact selection controls and collapse the optional rewrite instruction so Generate Reply remains visible.
+- Restore Summarize Email availability when leaving a rewrite preview. Preserve generation, improvement, undo and writing preferences.
+- Reject selections inside recognizable plain-text quotes and signatures, including partial selections that omit their delimiters.
+- Add native toolbar-popup regression checks, including actual Generate Reply and Open Settings button actions in HTML and plain-text compose windows. Responses are simulated; no live model calls or publication.
+
+## AI Mate 1.0.22
+
+- Rewrite a selection from the compose widget using Paraphrase, Formal, Direct, Friendly, Shorter or More detailed. Review the original and result before replacing; regenerate, copy, cancel or undo without rewriting the whole draft.
+- Use actual editor ranges, reject stale or unsupported selections, preserve outside text and formatting, and retain a reversible in-memory DOM journal. Restore neighbouring whitespace affected by Thunderbird's native editor cleanup.
+- Send only selection text, its link destinations and the specific rewrite instruction for this action. Save only the rewrite style. Preview generation does not modify the email.
+- Default new installs to GPT-6 Luna, add GPT-6.1 Terra, identify deprecated models, and remove retired GPT-3.5 Turbo from new choices while preserving saved IDs and parameters. Keep Chat Completions with explicit `store: false`.
+- Update bundled DOMPurify to 3.4.17 and test-only undici to its patched release. Refuse unsanitized rendering, validate extension message senders and compose targets, and exclude attachments/raw MIME from summary extraction.
+- Keep existing whole-draft generation, improvement, summaries, writing preferences and undo. Keep Thunderbird 115 as the declared minimum; native verification uses Thunderbird 159.0.
+
+This package is local and has not been published. Validation uses simulated OpenAI responses, not real credentials or paid requests. See TESTING.md for the actual checks and limits.
+
+## AI Mate 1.0.21
 
 - Add `gpt-6-luna`, `gpt-6.1-sol`, and `gpt-6-astra` to the model selector while retaining the six existing choices. The default remains `gpt-4o-mini`, and upgrading preserves your selected model.
 - Choose Other model to enter an exact custom model ID. Previously saved IDs outside the catalog remain available instead of being replaced.
