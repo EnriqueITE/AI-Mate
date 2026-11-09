@@ -157,6 +157,7 @@ async function runNativeQA() {
       await undoLastReplyForCompose(tab.id);
       qaAssert(ReplyCore.snapshot(await browser.compose.getComposeDetails(tab.id)) === ReplyCore.snapshot(draftBefore), "Generated reply undo failed");
       await qaReport({stage:"toolbar-generate-no-selection-passed",isPlainText,...generated});
+      await browser.storage.local.remove(["qaOptionsResult", "qaOptionsRun"]);
       const settings = await openToolbar(tab,"settings");
       let optionsTab;
       for(let tries=0; tries<100; tries++) {
@@ -165,6 +166,16 @@ async function runNativeQA() {
         await qaDelay(100);
       }
       qaAssert(optionsTab,"Open Settings button did not open the options page");
+      await browser.windows.update(optionsTab.windowId,{width:1100,height:850});
+      await browser.storage.local.set({qaOptionsRun:true});
+      let optionsResult;
+      for(let tries=0;tries<100;tries++) {
+        await qaDelay(100);
+        optionsResult=(await browser.storage.local.get("qaOptionsResult")).qaOptionsResult;
+        if(optionsResult) break;
+      }
+      qaAssert(optionsResult?.ok,"Native settings layout: "+JSON.stringify(optionsResult));
+      await qaReport({stage:"native-settings-document-layout-passed",isPlainText,...optionsResult});
       await browser.tabs.remove(optionsTab.id);
       await qaReport({stage:"toolbar-open-settings-passed",isPlainText,...settings});
       if(isPlainText) {
@@ -218,7 +229,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const rect = footer.getBoundingClientRect();
     const linkRect = link.getBoundingClientRect();
     const contentRect = content.getBoundingClientRect();
-    if(rect.height <= 0 || rect.top < 0 || rect.bottom > innerHeight + 1 || innerHeight - rect.bottom > 1) throw new Error("Support footer is not visible at the bottom: " + state);
+    if(rect.height <= 0 || rect.top < 0 || rect.bottom > innerHeight + 1 || innerHeight - rect.bottom > 1) throw new Error("Support footer is not visible at the bottom: " + JSON.stringify({state,innerHeight,footerTop:rect.top,footerBottom:rect.bottom,footerHeight:rect.height,documentHeight:document.documentElement.getBoundingClientRect().height}));
     if(contentRect.bottom > rect.top + 1) throw new Error("Support footer overlaps scrollable content: " + state);
     if(linkRect.top < rect.top || linkRect.bottom > rect.bottom || linkRect.left < 0 || linkRect.right > innerWidth) throw new Error("Support link is clipped: " + state);
     const hit = document.elementFromPoint(linkRect.x + linkRect.width / 2, linkRect.y + linkRect.height / 2);
@@ -238,8 +249,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     await wait(() => !e("generate").disabled && (mode !== "rewrite" || (!e("rewriteControls").hidden && !e("rewrite").disabled)), "popup actions unavailable");
     await new Promise(resolve => setTimeout(resolve, 350));
     const rect = e("generate").getBoundingClientRect();
-    const geometry = {width:innerWidth,height:innerHeight,generateTop:rect.top,generateBottom:rect.bottom};
+    const content = document.querySelector(".container");
+    const geometry = {width:innerWidth,height:innerHeight,generateTop:rect.top,generateBottom:rect.bottom,clientHeight:content.clientHeight,scrollHeight:content.scrollHeight};
     if(innerHeight < 350 || rect.top < 0 || rect.bottom > innerHeight) throw new Error("Toolbar popup clipped: " + JSON.stringify(geometry));
+    if(["rewrite","generate","settings"].includes(mode) && content.scrollHeight > content.clientHeight + 1) throw new Error("Initial toolbar popup needs scrolling: " + JSON.stringify({mode,...geometry}));
     const settingsRect = e("openOptions").getBoundingClientRect();
     if(settingsRect.top < 0 || settingsRect.bottom > innerHeight || e("openOptions").closest("[hidden]")) throw new Error("Settings is not visible");
     checkFooter(mode === "rewrite" ? "selected-text" : "no-selection", "summarize");
@@ -274,18 +287,57 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch(error) {await browser.storage.local.set({qaPopupResult:{ok:false,error:String(error)}});}
 });
 '''
+options_driver = r'''
+document.addEventListener("DOMContentLoaded", async () => {
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  try {
+    let run = false;
+    for(let n=0;n<100;n++) {
+      run=(await browser.storage.local.get("qaOptionsRun")).qaOptionsRun;
+      if(run && document.getElementById("model").options.length) break;
+      await pause(50);
+    }
+    if(!run) throw new Error("Settings layout test was not started");
+    await pause(200);
+    const body=document.body, container=document.querySelector(".container"), page=document.scrollingElement;
+    const rootStyle=getComputedStyle(document.documentElement), bodyStyle=getComputedStyle(body), contentStyle=getComputedStyle(container);
+    if([rootStyle.overflowY,bodyStyle.overflowY].some(v=>v==='hidden'||v==='clip')) throw new Error("Settings document scrolling is disabled");
+    if(rootStyle.maxHeight!=='none'||bodyStyle.maxHeight!=='none') throw new Error("Settings inherited a popup height limit");
+    if(contentStyle.overflowY==='auto'||contentStyle.overflowY==='scroll'||container.scrollHeight>container.clientHeight+1) throw new Error("Settings has an inner popup scroller");
+    const width=container.getBoundingClientRect().width;
+    if(innerWidth<700||width<=400||width>innerWidth) throw new Error("Settings is constrained to popup width: "+JSON.stringify({width,viewport:innerWidth}));
+    if(page.scrollHeight<=innerHeight||body.getBoundingClientRect().height<=innerHeight) throw new Error("Settings body does not grow with its form");
+    const save=document.getElementById("save");
+    save.scrollIntoView({block:"center"});
+    const saveRect=save.getBoundingClientRect();
+    if(page.scrollTop<=0||container.scrollTop!==0||saveRect.top<0||saveRect.bottom>innerHeight) throw new Error("Save is not reachable by document scrolling");
+    const hit=document.elementFromPoint(saveRect.x+saveRect.width/2,saveRect.y+saveRect.height/2);
+    if(!save.contains(hit)) throw new Error("Save is obscured");
+    const footer=document.querySelector(".meta");
+    if(!footer||['fixed','sticky'].includes(getComputedStyle(footer).position)) throw new Error("Settings footer escaped document flow");
+    footer.scrollIntoView({block:"end"});
+    const footerRect=footer.getBoundingClientRect();
+    if(footerRect.top<0||footerRect.bottom>innerHeight+1) throw new Error("Settings footer is clipped");
+    const geometry={viewportWidth:innerWidth,viewportHeight:innerHeight,formWidth:width,documentHeight:page.scrollHeight,documentScrollTop:page.scrollTop,containerScrollTop:container.scrollTop};
+    await browser.storage.local.set({qaOptionsResult:{ok:true,geometry,stages:["fluid-width","document-scroll","save-reachable","footer-in-document"]}});
+  } catch(error) {await browser.storage.local.set({qaOptionsResult:{ok:false,error:String(error)}});}
+});
+'''
 with zipfile.ZipFile(PROFILE / "extensions" / "ai-mate-qa@local.test.xpi", "w", zipfile.ZIP_DEFLATED) as archive:
     for file in files:
         if file == "manifest.json":
             content = json.dumps(manifest)
         elif file == "popup.html":
             content = (ROOT / file).read_text(encoding="utf-8").replace('</body>', '<script src="qa-popup.js"></script></body>')
+        elif file == "options.html":
+            content = (ROOT / file).read_text(encoding="utf-8").replace('</body>', '<script src="qa-options.js"></script></body>')
         else:
             content = (ROOT / file).read_bytes()
         archive.writestr(file, content)
     archive.writestr("qa-bootstrap.js", bootstrap)
     archive.writestr("qa-run.js", runner)
     archive.writestr("qa-popup.js", popup_driver)
+    archive.writestr("qa-options.js", options_driver)
 
 prefs = {
     "extensions.autoDisableScopes": 0, "extensions.enabledScopes": 15,

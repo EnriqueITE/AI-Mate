@@ -1,4 +1,10 @@
-# AI Mate 1.0.24
+# AI Mate 1.0.25
+
+- Restore Settings to a centered, responsive page with normal document scrolling and an accessible Save button. Scope the toolbar popup's size and scrolling rules to the compose popup only.
+- Fit the standard compose controls on screen with or without a selection: remove empty status gaps, use a slightly shorter resizable instruction field and put tips in an expandable section. Retain the visible support footer.
+- Keep the native 600 px popup height limit; longer previews, expanded instructions or messages can still scroll when needed. Refresh screenshots, including Settings in both themes.
+
+## AI Mate 1.0.24
 
 - Keep Buy me a coffee visible at the bottom of the compose widget, including during rewrite previews. The content scrolls above the footer without covering actions.
 - Preserve the corrected popup size and match native scrollbars to the light/dark theme.

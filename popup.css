@@ -34,14 +34,17 @@
 
 /* Toolbar popups measure their document to choose their own size. Never
    constrain their content using the popup's initial viewport (vh or 100%). */
-html { width: 400px; height: 600px; }
+.compose-popup, .compose-popup body { width: 400px; height: 600px; }
+.compose-popup body { display: flex; flex-direction: column; overflow: hidden; }
+.compose-popup .container { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; }
+.compose-popup #warning:empty, .compose-popup #status:empty { display: none; }
+.compose-popup #prompt { height: 78px; min-height: 78px; }
+.compose-popup .rewrite-section { padding-bottom: 8px; margin-bottom: 8px; }
+.compose-popup .rewrite-section p.hint { margin: 6px 0; }
+.reply-help { margin-top: 8px; font-size: 11px; color: var(--text-muted); }
+.reply-help summary { cursor: pointer; }
 body {
   margin: 0;
-  width: 400px;
-  height: 600px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
@@ -49,9 +52,6 @@ body {
 .container {
   width: 100%;
   box-sizing: border-box;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: 14px 16px 16px;
   background: linear-gradient(0deg, rgba(21,101,192,0.03), rgba(21,101,192,0.03)) , var(--surface);
   border: 1px solid var(--outline);
@@ -63,6 +63,11 @@ body {
 .popup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .popup-header h1 { margin: 0; }
 .popup-header button { font-size: 12px; }
+/* Settings is a full document, not a toolbar popup. Only the page scrolls. */
+.settings-page body { max-width: 808px; margin: 0 auto; padding: 24px; box-sizing: border-box; }
+.settings-page .field { margin-bottom: 14px; }
+.settings-page .meta { padding: 0 8px 16px; }
+.settings-page input { min-width: 0; }
 .support-footer {
   flex: none;
   padding: 10px 16px;
@@ -367,5 +372,5 @@ body.open-left .container.show-summary .summary-section {
 .rewrite-toolbar button { white-space: nowrap; }
 .rewrite-instructions { font-size: 12px; color: var(--text-muted); }
 .rewrite-instructions summary { cursor: pointer; }
-.reviewing-rewrite .link-row, .reviewing-rewrite .container > .reply-hint { display: none; }
+.reviewing-rewrite .reply-help { display: none; }
 [hidden] { display: none !important; }
