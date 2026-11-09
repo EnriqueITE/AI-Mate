@@ -1,4 +1,10 @@
-# AI Mate 1.0.23
+# AI Mate 1.0.24
+
+- Keep Buy me a coffee visible at the bottom of the compose widget, including during rewrite previews. The content scrolls above the footer without covering actions.
+- Preserve the corrected popup size and match native scrollbars to the light/dark theme.
+- Refresh store screenshots of reply, selection and preview states in both themes using offline demonstration data.
+
+## AI Mate 1.0.23
 
 - Fix the compose toolbar popup collapsing to a narrow strip. Let Thunderbird measure intrinsic content height, with a 400 px width and a fixed 600 px scrolling limit instead of a viewport-dependent inner container.
 - Keep Open Settings in the header, including while reviewing a rewrite. Compact selection controls and collapse the optional rewrite instruction so Generate Reply remains visible.
