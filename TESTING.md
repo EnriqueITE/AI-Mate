@@ -1,3 +1,13 @@
+# Version 1.0.25 — isolated Settings layout and compact popup, November 9, 2026
+
+- 150/150 automated tests and JavaScript syntax checks pass. This patch changes presentation and development checks, not AI behavior or saved settings.
+- Native Thunderbird 159.0 confirms the toolbar popup is capped at 600 CSS pixels even when the document requests 680. The final design retains 400 × 600 and fits standard controls without scrolling. Initial states with and without a selection measure clientHeight=scrollHeight=561; the footer remains visible at y=563–600.
+- New native checks open the actual Settings page from Open Settings, verify a 760 px form in a 1055 px viewport, document scrolling instead of a nested popup scroller, and accessible Save and footer links. HTML/plain-text compose checks, rewrite/apply/undo, generation and settings opening pass with 13 simulated API requests. Final report: `dist/qa-1.0.25-20261109-203208/report.json`.
+- Eight refreshed screenshots include six widget views (800 × 1200 pixels) and two full-page Settings views (960 × 1527). They render production assets in isolated Edge with demo data; these are not native Thunderbird-window captures or real model output. ZIP: `dist/ai-mate-1.0.25-screenshots.zip`.
+- XPI verification uses `python scripts/verify-package.py`. Native testing remains headless with an isolated profile; no real API requests, personal credentials, store upload or Thunderbird 115 runtime testing was performed. Expanded help/instructions, longer output and messages may legitimately need scrolling.
+
+---
+
 # Version 1.0.24 — visible support footer and screenshots, November 9, 2026
 
 - 150/150 automated tests and runtime syntax checks pass. No dependencies or AI request behavior changed.

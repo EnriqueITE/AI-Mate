@@ -16,11 +16,14 @@ const html = (await readFile(path.join(root, 'popup.html'), 'utf8'))
   .replace('<head>', `<head><base href="${pathToFileURL(root + path.sep).href}">`)
   .replace('<script src="lib/dompurify.min.js">', `<script src="${pathToFileURL(path.join(output, 'fixture.js')).href}"></script><script src="lib/dompurify.min.js">`);
 await writeFile(path.join(output, 'widget.html'), html);
+await writeFile(path.join(output, 'settings.html'), (await readFile(path.join(root, 'options.html'), 'utf8'))
+  .replace('<head>', `<head><base href="${pathToFileURL(root + path.sep).href}">`)
+  .replace('<script src="model-config.js">', `<script src="${pathToFileURL(path.join(output, 'fixture.js')).href}"></script><script src="model-config.js">`));
 await writeFile(path.join(output, 'fixture.js'), `
 const fixtureMode = new URL(location.href).searchParams.get('scene');
 window.browser = {
   tabs: {query: async () => [{id:42,type:'messageCompose',active:true}]},
-  storage: {local: {get: async defaults => ({...defaults,openaiApiKey:'offline-demo',rewriteStyle:'formal'}),set:async()=>{}}},
+  storage: {local: {get: async defaults => ({...defaults,openaiApiKey:fixtureMode==='settings'?'':'offline-demo',rewriteStyle:'formal'}),set:async()=>{}}},
   runtime: {connect:()=>({}),sendMessage:async m => {
     if(m.type==='GET_COMPOSE_ACTION_STATE') return {ok:true,canRewrite:fixtureMode!=='reply',token:'demo',canImprove:true,canUndo:false,undoReason:'There is no AI-Mate change to undo in this compose window.',rewriteReason:'Select text in your email to rewrite it.'};
     if(m.type==='REWRITE_SELECTION') return {ok:true,token:'demo',original:"Could you send the revised proposal before Thursday? We need time to review it before Friday's meeting.",text:"Please send the revised proposal before Thursday so that we have time to review it before Friday's meeting. Thank you."};
@@ -69,6 +72,7 @@ try {
   await call('Emulation.setDeviceMetricsOverride',{width:400,height:600,deviceScaleFactor:2,mobile:false});
   const captures=[];
   for(const theme of ['dark','light']) {
+    await call('Emulation.setDeviceMetricsOverride',{width:400,height:600,deviceScaleFactor:2,mobile:false});
     await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:theme}]});
     for(const [index,scene] of ['reply','selection','preview'].entries()) {
       await call('Page.navigate',{url:pathToFileURL(path.join(output,'widget.html')).href+`?scene=${scene}`});
@@ -79,16 +83,27 @@ try {
       }
       await evaluate(`document.fonts.ready;document.querySelector('.container').scrollTop=0`);
       await pause(100);
-      const geometry=await evaluate(`(()=>{const f=document.querySelector('.support-footer').getBoundingClientRect();return {width:innerWidth,height:innerHeight,footerTop:f.top,footerBottom:f.bottom};})()`);
+      const geometry=await evaluate(`(()=>{const f=document.querySelector('.support-footer').getBoundingClientRect();const c=document.querySelector('.container');return {width:innerWidth,height:innerHeight,footerTop:f.top,footerBottom:f.bottom,clientHeight:c.clientHeight,scrollHeight:c.scrollHeight};})()`);
       if(geometry.footerBottom>600 || geometry.footerTop<540) throw new Error('Footer not at the bottom: '+JSON.stringify(geometry));
+      if(scene!=='preview' && geometry.scrollHeight>geometry.clientHeight+1) throw new Error('Initial widget should not need scrolling: '+JSON.stringify(geometry));
       const screenshot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false,clip:{x:0,y:0,width:400,height:600,scale:1}});
       const name=`0${index+1}-${scene}-${theme}.png`;
       await writeFile(path.join(output,name),Buffer.from(screenshot.data,'base64'));
       captures.push({file:name,...geometry});
     }
+    await call('Emulation.setDeviceMetricsOverride',{width:960,height:900,deviceScaleFactor:1,mobile:false});
+    await call('Page.navigate',{url:pathToFileURL(path.join(output,'settings.html')).href+'?scene=settings'});
+    await waitFor(`document.readyState==='complete' && document.getElementById('model')?.options.length>0`);
+    await pause(100);
+    const settingsGeometry=await evaluate(`(()=>{const c=document.querySelector('.container');return {width:innerWidth,height:document.documentElement.scrollHeight,formWidth:c.clientWidth,clientHeight:c.clientHeight,scrollHeight:c.scrollHeight};})()`);
+    if(settingsGeometry.formWidth<=400 || settingsGeometry.scrollHeight>settingsGeometry.clientHeight+1) throw new Error('Settings inherited popup constraints');
+    const settingsShot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:960,height:settingsGeometry.height,scale:1}});
+    const settingsName=`04-settings-${theme}.png`;
+    await writeFile(path.join(output,settingsName),Buffer.from(settingsShot.data,'base64'));
+    captures.push({file:settingsName,...settingsGeometry});
   }
   await writeFile(path.join(output,'captures.json'),JSON.stringify({version,renderer:'Microsoft Edge, actual widget assets',demoResponses:true,captures},null,2)+'\n');
-  await writeFile(path.join(output,'README.txt'),`AI Mate ${version} — screenshots\n\nSix PNG files at 800 x 1200 pixels: reply, selection, and preview in light/dark themes.\nCaptured directly from the production widget HTML/CSS/JavaScript rendered in Edge with offline demonstration data. These are not screenshots of a Thunderbird window or real model responses.\nThe native Thunderbird toolbar popup is verified separately by scripts/native-qa.py.\nNo email content, API keys, or personal profile data is used.\n`);
+  await writeFile(path.join(output,'README.txt'),`AI Mate ${version} — screenshots\n\nSix widget PNGs at 800 x 1200 pixels: reply, selection, and preview in light/dark themes. Two additional full-page Settings captures (960 pixels wide) show the fluid document layout.\nCaptured directly from the production HTML/CSS/JavaScript rendered in Edge with offline demonstration data. These are not screenshots of a Thunderbird window or real model responses.\nThe native Thunderbird toolbar popup and Settings document are verified separately by scripts/native-qa.py.\nNo email content, API keys, or personal profile data is used.\n`);
   console.log(JSON.stringify({output,captures},null,2));
   await call('Browser.close').catch(()=>{});
 } finally {
