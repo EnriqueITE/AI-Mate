@@ -1,4 +1,4 @@
-/* global DOMPurify, ReplyCore, ModelConfig */
+/* global DOMPurify, ReplyCore, ModelConfig, RewriteCore */
 /* Background script for AI Reply Assistant */
 
 function sanitizeAiContent(content) {
@@ -9,9 +9,9 @@ function sanitizeAiContent(content) {
       return DOMPurify.sanitize(text);
     }
   } catch (err) {
-    console.warn("AI Mate: DOMPurify sanitize failed, returning raw content.", err);
+    console.warn("AI Mate: summary sanitization failed.");
   }
-  return text;
+  throw new Error("The summary could not be displayed safely. Please reload AI Mate and try again.");
 }
 
 async function getSettings() {
@@ -88,8 +88,8 @@ function stripHtml(html) {
   try {
     return ReplyCore.htmlToText(html);
   } catch (e) {
-    // Fallback simple stripper
-    return (html || "").replace(/<[^>]+>/g, "");
+    // A failed parser must not expose hidden HTML or raw MIME as email text.
+    return "";
   }
 }
 
@@ -177,12 +177,19 @@ async function summarizeTextContent(originalText, userPrompt = "", language = "a
 
 function extractPlainTextFromPayload(part) {
   if (!part) return "";
+  const disposition = part.headers?.["content-disposition"] || [];
+  if (part.name || part.filename || String(disposition).toLowerCase().includes("attachment")) return "";
   const mime = (part.mimeType || part.contentType || "").toLowerCase();
+  if (mime.startsWith("message/")) return "";
   if (typeof part.body === "string" && part.body.length) {
     if (mime.includes("text/plain")) return part.body;
     if (mime.includes("text/html")) return stripHtml(part.body);
   }
   if (Array.isArray(part.parts)) {
+    if (mime.startsWith("multipart/alternative")) {
+      const plain = part.parts.find((child) => /^text\/plain(?:;|$)/i.test(child.contentType || child.mimeType || "") && !child.name && !child.filename);
+      if (plain) return extractPlainTextFromPayload(plain);
+    }
     return part.parts
       .map((child) => extractPlainTextFromPayload(child))
       .filter(Boolean)
@@ -207,48 +214,12 @@ async function getMessagePlainText(messageId) {
         return plain;
       }
     } catch (e) {
-      console.warn("AI Mate: messages.getFull failed:", e);
+      console.warn("AI Mate: inline message extraction failed.");
     }
   }
 
-  // Try messages.getRaw as a fallback and attempt to strip HTML
-  if (typeof messagesApi.getRaw === "function") {
-    try {
-      const raw = await messagesApi.getRaw(messageId);
-      if (raw && raw.length) {
-        const textPlainMatch = raw.match(/Content-Type: text\/plain;[\s\S]*?\r?\n\r?\n([\s\S]*)/i);
-        if (textPlainMatch && textPlainMatch[1]) {
-          const candidate = textPlainMatch[1].trim();
-          if (candidate) {
-            return candidate;
-          }
-        }
-        const stripped = stripHtml(raw);
-        if (stripped && stripped.trim()) {
-          return stripped;
-        }
-      }
-    } catch (e) {
-      console.warn("AI Mate: messages.getRaw failed:", e);
-    }
-  }
-
-  // Older code paths tried messages.getBody(); attempt if available
-  if (typeof messagesApi.getBody === "function") {
-    try {
-      const htmlBody = await messagesApi.getBody(messageId);
-      if (htmlBody) {
-        const plain = stripHtml(htmlBody);
-        if (plain && plain.trim()) {
-          return plain;
-        }
-      }
-    } catch (e) {
-      console.warn("AI Mate: messages.getBody failed:", e);
-    }
-  }
-
-  console.warn("AI Mate: Unable to extract plain text for message", messageId);
+  // Do not fall back to raw MIME: that can include attachments and headers.
+  console.warn("AI Mate: no readable inline message body.");
   return "";
 }
 
@@ -301,6 +272,7 @@ async function requestCompletionText(apiKey, payload, purpose = "reply") {
     try {
       response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
+        credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", redirect: "error",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
         body: JSON.stringify(payload),
         signal: controller.signal
@@ -355,10 +327,95 @@ async function testModel(apiKey, requestedModel) {
 const replyRequests = new Map();
 const previousReplies = new Map();
 const undoReplies = new Map();
+const rewritePreviews = new Map();
 browser.tabs.onRemoved.addListener((tabId) => {
   replyRequests.delete(tabId);
   previousReplies.delete(tabId);
   undoReplies.delete(tabId);
+  rewritePreviews.delete(tabId);
+});
+
+const selectionReady = (async () => {
+  if (!browser.composeScripts?.register) return;
+  await browser.composeScripts.register({ js: [{ file: "rewrite-core.js" }, { file: "selection-editor.js" }] });
+  const tabs = await browser.tabs.query({});
+  await Promise.all(tabs.filter((tab) => tab.type === "messageCompose").map((tab) => injectSelectionEditor(tab.id).catch(() => {})));
+})().catch(() => { console.warn("AI Mate: selection editor registration failed."); });
+
+async function injectSelectionEditor(tabId) {
+  await browser.tabs.executeScript(tabId, { file: "rewrite-core.js" });
+  await browser.tabs.executeScript(tabId, { file: "selection-editor.js" });
+}
+
+async function selectionRequest(tabId, command, fields = {}) {
+  await selectionReady;
+  const message = { channel: "ai-mate-selection", command, ...fields };
+  let result;
+  try { result = await browser.tabs.sendMessage(tabId, message); }
+  catch {
+    // Only read operations may recover by injection. Never repeat a mutation.
+    if (command !== "state") throw new Error("The selection editor is unavailable. Select the text again.");
+    await injectSelectionEditor(tabId);
+    result = await browser.tabs.sendMessage(tabId, message);
+  }
+  if (!result?.ok) throw new Error(result?.error || "The selection editor is unavailable. Reopen this compose window.");
+  return result;
+}
+
+async function generateSelectionPreview(tabId, token, style, instruction) {
+  if (typeof token !== "string" || !token) throw new Error("Select some text in the email body first.");
+  const request = acquireComposeChange(tabId);
+  const preview = { token, request, text: "" };
+  rewritePreviews.set(tabId, preview);
+  try {
+    const selection = await selectionRequest(tabId, "verify", { token });
+    const settings = await getSettings();
+    if (!settings.openaiApiKey) throw new Error("OpenAI API key not set. Configure it in Add-on Options.");
+    const messages = RewriteCore.buildMessages(selection, style, instruction);
+    const content = await requestCompletionText(settings.openaiApiKey, ModelConfig.buildPayload(settings, messages), "rewrite");
+    await selectionRequest(tabId, "verify", { token });
+    if (rewritePreviews.get(tabId) !== preview || replyRequests.get(tabId) !== request) throw new Error("This rewrite was cancelled or the compose window closed.");
+    preview.text = RewriteCore.validateResult(content, selection.links);
+    return { ok: true, token, original: selection.text, text: preview.text };
+  } catch (error) {
+    if (rewritePreviews.get(tabId) === preview) rewritePreviews.delete(tabId);
+    throw error;
+  } finally {
+    if (replyRequests.get(tabId) === request) replyRequests.delete(tabId);
+  }
+}
+
+async function applySelectionPreview(tabId, token) {
+  const request = acquireComposeChange(tabId);
+  try {
+    const preview = rewritePreviews.get(tabId);
+    if (!preview?.text || preview.token !== token) throw new Error("Generate a new rewrite preview before replacing the selection.");
+    const previous = previousReplies.get(tabId) || null;
+    const result = await selectionRequest(tabId, "apply", { token, text: preview.text });
+    if (replyRequests.get(tabId) !== request) throw new Error("The compose window closed.");
+    undoReplies.set(tabId, { selectionToken: result.undoToken, previousReply: previous });
+    // Keep existing reply identity: if selection rewriting edits it, regeneration
+    // must refuse it as edited until Undo restores that exact previous reply.
+    rewritePreviews.delete(tabId);
+    return { ok: true };
+  } finally { if (replyRequests.get(tabId) === request) replyRequests.delete(tabId); }
+}
+
+async function discardSelectionPreview(tabId, token) {
+  if (rewritePreviews.get(tabId)?.token === token) rewritePreviews.delete(tabId);
+  await selectionRequest(tabId, "discard", { token }).catch(() => {});
+  return { ok: true };
+}
+
+// The popup owns a short-lived preview lease. Closing it invalidates pending
+// results even when unload messages cannot be delivered.
+browser.runtime.onConnect?.addListener((port) => {
+  if (!isTrustedPage(port.sender) || !/^rewrite:\d+$/.test(port.name)) return;
+  const tabId = Number(port.name.slice(8));
+  port.onDisconnect.addListener(() => {
+    const preview = rewritePreviews.get(tabId);
+    if (preview) discardSelectionPreview(tabId, preview.token);
+  });
 });
 
 function acquireComposeChange(tabId) {
@@ -402,6 +459,8 @@ async function generateReplyForCompose(tabId, userPrompt, requestedStyle, reques
     if (replyRequests.get(tabId) === request) {
       previousReplies.set(tabId, insertion.state);
       undoReplies.set(tabId, { undo: insertion.undo, previousReply: previous });
+      rewritePreviews.delete(tabId);
+      await selectionRequest(tabId, "clearUndo").catch(() => {});
     }
   } finally {
     if (replyRequests.get(tabId) === request) replyRequests.delete(tabId);
@@ -413,9 +472,13 @@ async function undoLastReplyForCompose(tabId) {
   try {
     const record = undoReplies.get(tabId);
     if (!record) throw new Error("There is no AI-Mate change to undo in this compose window.");
-    const details = await getComposeApi().getComposeDetails(tabId);
-    const update = ReplyCore.prepareUndo(details, record.undo);
-    await writeComposeChange(tabId, request, details, update);
+    if (record.selectionToken) {
+      await selectionRequest(tabId, "undo", { token: record.selectionToken });
+    } else {
+      const details = await getComposeApi().getComposeDetails(tabId);
+      const update = ReplyCore.prepareUndo(details, record.undo);
+      await writeComposeChange(tabId, request, details, update);
+    }
     if (replyRequests.get(tabId) === request) {
       if (record.previousReply) previousReplies.set(tabId, record.previousReply);
       else previousReplies.delete(tabId);
@@ -432,11 +495,16 @@ async function getComposeActionState(tabId) {
   const details = await getComposeApi().getComposeDetails(tabId);
   if (replyRequests.has(tabId)) return busyState;
   const state = { ok: true, busy: false, canImprove: true, improveReason: "", canUndo: false, undoReason: "There is no AI-Mate change to undo in this compose window." };
+  try { Object.assign(state, await selectionRequest(tabId, "state")); }
+  catch { Object.assign(state, { canRewrite: false, rewriteReason: "Selection rewriting is unavailable. Reopen this compose window." }); }
   try { ReplyCore.buildImproveContext(details); }
   catch (error) { state.canImprove = false; state.improveReason = error.message; }
   const record = undoReplies.get(tabId);
   if (record) {
-    try { ReplyCore.prepareUndo(details, record.undo); state.canUndo = true; state.undoReason = ""; }
+    try {
+      if (record.selectionToken) Object.assign(state, await selectionRequest(tabId, "undoState", { token: record.selectionToken }));
+      else { ReplyCore.prepareUndo(details, record.undo); state.canUndo = true; state.undoReason = ""; }
+    }
     catch (error) { state.undoReason = error.message; }
   }
   return state;
@@ -494,6 +562,11 @@ async function summarizeDisplayedMessage(tabId, userPrompt = "", language = "") 
   return summarizeTextContent(context, userPrompt, language);
 }
 // Initialize message handling with proper async handling
+function isTrustedPage(sender) {
+  if (sender?.id !== browser.runtime.id || typeof sender.url !== "string") return false;
+  return ["popup.html", "options.html", "reader-popup.html"].some((page) => sender.url.split(/[?#]/)[0] === browser.runtime.getURL(page));
+}
+
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const handleMessage = async () => {
     if (!msg || typeof msg !== 'object') {
@@ -501,14 +574,25 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     try {
+      if (!isTrustedPage(sender)) throw new Error("This request did not come from an AI Mate page.");
+      const composeTypes = ["GENERATE_REPLY", "UNDO_LAST_REPLY", "GET_COMPOSE_ACTION_STATE", "SUMMARIZE_EMAIL", "REWRITE_SELECTION", "APPLY_REWRITE", "DISCARD_REWRITE"];
+      if (composeTypes.includes(msg.type)) {
+        if (sender.url.split(/[?#]/)[0] !== browser.runtime.getURL("popup.html")) throw new Error("Open the AI Mate compose widget for this action.");
+        if (msg.tabId === undefined) msg = { ...msg, tabId: await getActiveComposeTabId() };
+        if (!Number.isSafeInteger(msg.tabId) || msg.tabId <= 0 || (await browser.tabs.get(msg.tabId)).type !== "messageCompose") throw new Error("The target is not an open compose window.");
+      }
+      if (["TEST_MODEL", "TEST_API_KEY"].includes(msg.type) && sender.url.split(/[?#]/)[0] !== browser.runtime.getURL("options.html")) throw new Error("Open Settings to test a model.");
       switch(msg.type) {
+        case "REWRITE_SELECTION": return await generateSelectionPreview(msg.tabId, msg.token, msg.style, msg.instruction || "");
+        case "APPLY_REWRITE": return await applySelectionPreview(msg.tabId, msg.token);
+        case "DISCARD_REWRITE": return await discardSelectionPreview(msg.tabId, msg.token);
         case "GENERATE_REPLY":
           try {
             const tabId = msg.tabId || (await getActiveComposeTabId());
             await generateReplyForCompose(tabId, msg.prompt || "", msg.replyStyle, msg.replyLength, msg.operation === undefined ? "generate" : msg.operation);
             return { ok: true };
           } catch (e) {
-            console.error('Generate reply error:', e);
+            console.error('AI Mate: reply generation failed.');
             throw e;
           }
 
@@ -524,7 +608,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             await browser.runtime.openOptionsPage();
             return { ok: true };
           } catch (e) {
-            console.error('Primary options open error:', e);
+            console.error('AI Mate: could not open Settings.');
             // Try alternative method if primary fails
             try {
               await browser.windows.create({
@@ -535,7 +619,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               });
               return { ok: true, fallback: true };
             } catch (e2) {
-              console.error('Fallback options open error:', e2);
+              console.error('AI Mate: Settings fallback failed.');
               throw e2;
             }
           }
@@ -574,7 +658,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           throw new Error(`Unknown message type: ${msg.type}`);
       }
     } catch (e) {
-      console.error('Message handling error:', e);
+      console.error('AI Mate: operation failed.');
       return { ok: false, error: e?.message || String(e) };
     }
   };
@@ -582,9 +666,9 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Proper async message handling
   handleMessage()
     .then(response => sendResponse(response))
-    .catch(error => sendResponse({ 
-      ok: false, 
-      error: error?.message || String(error) 
+    .catch(error => sendResponse({
+      ok: false,
+      error: error?.message || String(error)
     }));
 
   // Return true to indicate we will send a response asynchronously

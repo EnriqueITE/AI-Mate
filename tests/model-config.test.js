@@ -12,10 +12,10 @@ const configured = {
   openaiFrequencyPenalty: 0.1
 };
 
-test("the maintained catalog keeps all six existing IDs and adds the three approved models", () => {
-  assert.equal(models.DEFAULT_MODEL, "gpt-4o-mini");
+test("the current catalog adds Terra, retires GPT-3.5 and defaults new installs to Luna", () => {
+  assert.equal(models.DEFAULT_MODEL, "gpt-6-luna");
   assert.deepEqual(models.MODELS.map((model) => model.id).sort(), [
-    "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "gpt-3.5-turbo"
+    "gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-astra", "gpt-5", "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"
   ].sort());
   assert.equal(new Set(models.MODELS.map((model) => model.id)).size, 9);
   assert.ok(models.MODELS.every((model) => model.label && model.description));
@@ -33,7 +33,7 @@ test("empty, invalid, spaced, and invisible model IDs fail without falling back"
     assert.throws(() => models.normalizeModel(invalid), /model ID/i);
     if (invalid !== undefined) assert.throws(() => models.buildPayload({ openaiModel: invalid }, messages), /model ID/i);
   }
-  assert.equal(models.buildPayload({}, messages).model, "gpt-4o-mini");
+  assert.equal(models.buildPayload({}, messages).model, "gpt-6-luna");
 });
 
 test("profiles preserve legacy defaults and give every custom model independent safe defaults", () => {
@@ -57,23 +57,23 @@ test("profiles preserve legacy defaults and give every custom model independent 
 test("explicitly supported legacy models retain configured sampling values and use the modern token limit", () => {
   for (const id of ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "gpt-3.5-turbo"]) {
     assert.deepEqual(models.buildPayload({ ...configured, openaiModel: id }, messages), {
-      model: id, messages, temperature: 0.8, top_p: 0.9, presence_penalty: 0.2, frequency_penalty: 0.1, max_completion_tokens: 320
+      model: id, store: false, messages, temperature: 0.8, top_p: 0.9, presence_penalty: 0.2, frequency_penalty: 0.1, max_completion_tokens: 320
     });
   }
 });
 
 test("reasoning, unknown, snapshot, and fine-tuned IDs are preserved without optional sampling parameters", () => {
   for (const id of ["gpt-5", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra", "gpt-4o-mini-2024-07-18", "gpt-4o-custom", "ft:gpt-4o-mini:org:email:123", "future-model", "toString"]) {
-    assert.deepEqual(models.buildPayload({ ...configured, openaiModel: id }, messages), { model: id, messages, max_completion_tokens: 320 });
+    assert.deepEqual(models.buildPayload({ ...configured, openaiModel: id }, messages), { model: id, store: false, messages, max_completion_tokens: 320 });
   }
 });
 
 test("sampling is neither invented nor coerced and valid zero values survive", () => {
-  assert.deepEqual(models.buildPayload({ openaiModel: "gpt-4o-mini" }, messages), { model: "gpt-4o-mini", messages });
+  assert.deepEqual(models.buildPayload({ openaiModel: "gpt-4o-mini" }, messages), { model: "gpt-4o-mini", store: false, messages });
   assert.deepEqual(models.buildPayload({ openaiModel: "gpt-4o-mini", openaiTemperature: 0, openaiTopP: 0, openaiPresencePenalty: 0, openaiFrequencyPenalty: 0 }, messages), {
-    model: "gpt-4o-mini", messages, temperature: 0, top_p: 0, presence_penalty: 0, frequency_penalty: 0
+    model: "gpt-4o-mini", store: false, messages, temperature: 0, top_p: 0, presence_penalty: 0, frequency_penalty: 0
   });
-  assert.deepEqual(models.buildPayload({ openaiModel: "gpt-4o-mini", openaiTemperature: "0.4", openaiTopP: Infinity, openaiPresencePenalty: NaN, openaiFrequencyPenalty: null }, messages), { model: "gpt-4o-mini", messages });
+  assert.deepEqual(models.buildPayload({ openaiModel: "gpt-4o-mini", openaiTemperature: "0.4", openaiTopP: Infinity, openaiPresencePenalty: NaN, openaiFrequencyPenalty: null }, messages), { model: "gpt-4o-mini", store: false, messages });
 });
 
 test("token limits are validated for every profile and are never silently dropped or converted", () => {
@@ -98,7 +98,7 @@ test("payload construction does not mutate preferences or messages and excludes 
   const settings = Object.freeze({ ...configured, openaiModel: "gpt-6-luna", openaiApiKey: "offline-test-placeholder", writingPreferences: "Use concise wording", openaiReasoningEffort: "high" });
   const immutableMessages = Object.freeze([Object.freeze({ role: "user", content: "Test" })]);
   const payload = models.buildPayload(settings, immutableMessages);
-  assert.deepEqual(payload, { model: "gpt-6-luna", messages: immutableMessages, max_completion_tokens: 320 });
+  assert.deepEqual(payload, { model: "gpt-6-luna", store: false, messages: immutableMessages, max_completion_tokens: 320 });
   assert.equal(settings.openaiTemperature, 0.8);
   assert.equal(immutableMessages[0].content, "Test");
   for (const name of ["openaiApiKey", "writingPreferences", "reasoning_effort", "tools"]) assert.ok(!Object.hasOwn(payload, name));
@@ -111,5 +111,5 @@ test("the same module works as a browser global without CommonJS or Node APIs", 
   assert.equal(browser.ModelConfig.DEFAULT_MODEL, models.DEFAULT_MODEL);
   assert.deepEqual(JSON.parse(JSON.stringify(browser.ModelConfig.MODELS)), models.MODELS);
   const payload = browser.ModelConfig.buildPayload({ openaiModel: "gpt-6.1-sol", openaiMaxTokens: 512 }, messages);
-  assert.deepEqual(JSON.parse(JSON.stringify(payload)), { model: "gpt-6.1-sol", messages, max_completion_tokens: 512 });
+  assert.deepEqual(JSON.parse(JSON.stringify(payload)), { model: "gpt-6.1-sol", store: false, messages, max_completion_tokens: 512 });
 });

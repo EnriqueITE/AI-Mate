@@ -163,9 +163,8 @@ function replaceSummaryContent(target, markup) {
   if (!markup) {
     return;
   }
-  const sanitized = (typeof DOMPurify !== "undefined" && typeof DOMPurify.sanitize === "function")
-    ? DOMPurify.sanitize(markup)
-    : markup;
+  if (typeof DOMPurify === "undefined" || typeof DOMPurify.sanitize !== "function") throw new Error("The summary sanitizer is unavailable. Reload AI Mate.");
+  const sanitized = DOMPurify.sanitize(markup);
   const template = target.ownerDocument.createElement("template");
   template.innerHTML = sanitized;
   const fragment = target.ownerDocument.createDocumentFragment();

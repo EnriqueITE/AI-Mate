@@ -30,24 +30,22 @@
   }
 }
 
-html, body { height: 100%; }
+/* Toolbar popups measure their document to choose their own size. Never
+   constrain their content using the popup's initial viewport (vh or 100%). */
+html { width: 400px; height: auto; }
 body {
   margin: 0;
+  width: 400px;
+  height: auto;
+  max-height: 600px;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
-body.open-left {
-  text-align: right;
-  direction: rtl;
-}
-body.open-left .container {
-  display: inline-block;
-  direction: ltr;
-  text-align: left;
-}
 .container {
-  width: 360px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 14px 16px 16px;
   background: linear-gradient(0deg, rgba(21,101,192,0.03), rgba(21,101,192,0.03)) , var(--surface);
   border: 1px solid var(--outline);
@@ -56,11 +54,9 @@ body.open-left .container {
   position: relative;
 }
 
-body.open-left .container.show-summary {
-  min-height: 630px;
-  max-height: min(820px, 90vh);
-  overflow-y: auto;
-}
+.popup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.popup-header h1 { margin: 0; }
+.popup-header button { font-size: 12px; }
 
 /* Accent top border for a tech/AI vibe */
 .container::before {
@@ -345,3 +341,17 @@ body.open-left .container.show-summary .summary-section {
 
 
 
+/* Selection previews use plain text and explicit keyboard-accessible actions. */
+.rewrite-section { border-bottom: 1px solid #8793a440; padding-bottom: 12px; margin-bottom: 14px; }
+.rewrite-section h2 { font-size: 13px; margin: 12px 0 6px; }
+.rewrite-section select, .rewrite-section textarea { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+.rewrite-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow: auto; padding: 10px; border: 1px solid #8793a450; border-radius: 6px; user-select: text; }
+.rewrite-actions { flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rewrite-section textarea { min-height: 54px; }
+.rewrite-toolbar { display: flex; align-items: start; gap: 8px; }
+.rewrite-toolbar select { flex: 1; width: auto; min-width: 0; }
+.rewrite-toolbar button { white-space: nowrap; }
+.rewrite-instructions { font-size: 12px; color: var(--text-muted); }
+.rewrite-instructions summary { cursor: pointer; }
+.reviewing-rewrite .link-row, .reviewing-rewrite .container > .reply-hint { display: none; }
+[hidden] { display: none !important; }

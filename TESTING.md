@@ -1,3 +1,50 @@
+# Version 1.0.23 — toolbar popup regression, November 9, 2026
+
+The previous native checks opened the extension page in a separately sized window. They did not detect the toolbar popup's circular height constraint. A new test uses `browser.composeAction.openPopup({windowId})`, without an explicit size or tab-ID query parameter, and checks the actual viewport and button bounds.
+
+- **Reproduction:** before the fix, Thunderbird 159.0 opened the toolbar popup at 360 × 48 CSS pixels. Generate Reply was outside the viewport. Report: `dist/qa-1.0.22-20261109-175920/report.json`.
+- **Automated:** 150/150 Node tests pass, including original Generate Reply, Improve Draft, Summarize Email and Open Settings with/without a selection, persistent Settings access during preview, restored controls after cancellation, and partial selections inside plain-text quotes/signatures. Runtime syntax checks pass. The final npm audit reports zero vulnerabilities.
+- **Native:** the corrected toolbar popup measures 400 × 600 CSS pixels, with Generate Reply and Open Settings inside the viewport. Real toolbar panels in HTML/plain-text compose windows exercise preview, regeneration, replacement and undo. Reopening without a selection and clicking Generate Reply inserts the simulated completion; undo restores the original. Clicking Open Settings opens the actual options page. Existing editor tests also pass. Final report: `dist/qa-1.0.23-20261109-185955/report.json` (13 simulated API requests), including rejection of partial plain-text quote/signature selections while permitting authored text before them.
+- **Limits:** native checks run installed Thunderbird 159.0 in headless mode with an isolated offline profile and programmatic DOM button clicks. They do not represent physical mouse testing or tests on Thunderbird 115. No real OpenAI calls, new credentials or installation into the user's normal profile were performed. Store submission is separate from the source publication.
+- **Package:** `dist/ai-mate-1.0.23.xpi`, validated against the source allowlist and ZIP integrity; exact checksum/size recorded in `dist/verification-1.0.23.json`. The earlier 1.0.22 archive is retained.
+- **Upstream integration:** the later `origin/main` update `dafa80d` changes undici from 7.30.0 to 7.30.1. This release retains the reviewed 7.30.2 lockfile; it does not restore the older dependency. Source publication excludes XPI/ZIP packages and local QA profiles.
+
+---
+
+# Version 1.0.22 — November 9, 2026
+
+Implemented from GitHub `main` commit `5cd8065e22393d5b40ff6509249c553758324466` on `codex/rewrite-selection`. The unrelated local `codex/release-1.1.0` branch remains at `5c3d0063a6d142a03a4699ea5b9b1883cbfa47fb`; none of its implementation was merged.
+
+## Automated and dependency validation
+
+- The GitHub baseline passed 122 tests before implementation. The final `npm test` run passes **145/145 tests**, including selection ranges, six prompts, payload privacy, stale selections, edited result protection, per-window state, cancellation, link preservation, sender/target validation, MIME attachment exclusions, sanitizer failure, model preservation and popup DOM-button flows.
+- `npm run check` validates all runtime JavaScript. The test command uses Node's no-isolation mode because this environment blocks child-process creation in the default test runner. Node.js 24 or newer is required for tooling; no Node runtime is shipped in the extension.
+- `npm audit` reports **0 vulnerabilities** after updating test-only undici from 7.30.0 to 7.30.2. jsdom 29.1.1 remains compatible with the current tooling. The prior local 1.1.0 branch's audit is unrelated to this release.
+- Bundled DOMPurify was updated from 3.2.7 to 3.4.17, with its exact upstream license. SHA-256: JavaScript `CD37898F9782ADF54820C413191B5691803F0F137C799D6EDCFD38523B4C2C31`; license `CFC7749B96F63BD31C3C42B5C471BF756814053E847C10F3EB003417BC523D30`.
+
+## Native Thunderbird and visual checks
+
+`python scripts/native-qa.py` creates a new, isolated offline profile, installs a QA copy with fixture responses, uses a local report receiver, and terminates only that test instance. It never opens the user's normal profile or sends email. QA-only permissions, bootstrap scripts and fixture keys are excluded from the production package.
+
+The final run passed on **Thunderbird 159.0**, with 11 simulated completion requests. Report: `dist/qa-1.0.22-20261109-141744/report.json`.
+
+- In HTML and plain-text editors: capture a real selection; generate without modifying the draft or sending outside text; replace; restore with Undo; run existing Improve Draft/Generate Reply/Undo regressions.
+- HTML: preserve spaces adjacent to bold text, outside edits, signatures and quotes; restore exact original formatting; rewrite across paragraph boundaries after the compose API replaced the body element.
+- In real Thunderbird extension popup windows, programmatic DOM clicks exercised Rewrite selection, Regenerate, Replace selection and Undo last change in both compose formats. These windows use an explicit tab ID. Physical toolbar invocation and human mouse/keyboard operation were not automated.
+- The actual HTML/CSS and scripts were also rendered with fixture APIs in headless Edge. The dark preview was visually inspected, including wrapping and action buttons. Screenshot: `dist/widget-qa/preview-full.png`. This layout capture is not evidence of live model quality.
+
+Native testing exposed and fixed the absence of `crypto.randomUUID` in compose documents, native whitespace cleanup outside the selected range, and replacement of the body element by the compose API. Regression tests cover those cases.
+
+## Limits
+
+OpenAI responses were simulated throughout; no live credentials, paid model tests or real-model writing-quality evaluation were performed. Thunderbird 115 is the declared minimum but was not executed. Undo intentionally refuses ambiguous or edited affected nodes/ancestor formatting instead of overwriting current user edits. The extension interface remains in English. The XPI is built locally; it has not been published or installed into the personal Thunderbird profile.
+
+## Verified release archive
+
+`dist/ai-mate-1.0.22.xpi`: **28 allowlisted entries**, **290928 bytes**. SHA-256: `564f2b05b26cb608846190bb7a32c6e3d525faeb29598358f35b130e114e773c`. ZIP integrity, unique paths, production extension ID, minimum version, script references, exclusion of QA/dependencies, and byte-for-byte equality of every entry with its source all passed. Machine-readable evidence: `dist/verification-1.0.22.json`.
+
+---
+
 # AI Mate 1.0.21 validation
 
 ## Status
