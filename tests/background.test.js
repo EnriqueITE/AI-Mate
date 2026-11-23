@@ -153,6 +153,47 @@ test("summary extraction skips named and attached MIME parts and prefers plain a
   assert.doesNotMatch(source, /messagesApi\.getRaw|messagesApi\.getBody/);
 });
 
+test("reader summarizes the outer Thunderbird message and excludes attached messages", async () => {
+  const sender = { id: "ai-mate@test", url: "moz-extension://test/reader-popup.html" };
+  const attached = { contentType: "message/rfc822", partName: "1.2", parts: [
+    { contentType: "text/plain", body: "ATTACHED MESSAGE" }
+  ] };
+  const plain = { contentType: "text/plain", body: "Inline plain" };
+  const html = { contentType: "text/html", body: "<p>Inline HTML</p>" };
+  const cases = [
+    { parts: [plain], expected: "Inline plain" },
+    { parts: [{ contentType: "multipart/alternative", parts: [html, plain] }], expected: "Inline plain" },
+    { parts: [{ contentType: "multipart/alternative", parts: [
+      { ...plain, headers: { "content-disposition": ["attachment"] }, body: "ATTACHED TEXT" },
+      { ...plain, body: "   " }, html
+    ] }], expected: "Inline HTML" },
+    { parts: [] }
+  ];
+  for (const { parts, expected } of cases) {
+    const app = harness({ settings: { enableReaderSummaries: true } });
+    app.sandbox.browser.messageDisplay = { getDisplayedMessage: async () => ({ id: 123, subject: "Fixture" }) };
+    app.sandbox.browser.messages = { getFull: async (id) => {
+      assert.equal(id, 123);
+      return { contentType: "message/rfc822", partName: "", parts: [
+        { contentType: "multipart/mixed", partName: "1", parts: [...parts, attached] }
+      ] };
+    } };
+    const result = await app.request({ type: "SUMMARIZE_DISPLAYED_MESSAGE", tabId: undefined }, sender);
+    if (expected) {
+      assert.equal(result.ok, true, result.error);
+      assert.equal(result.summary, answer);
+      assert.equal(app.payloads.length, 1);
+      const input = app.payloads[0].messages[1].content;
+      assert.ok(input.includes(expected));
+      assert.doesNotMatch(input, /ATTACHED/);
+      if (expected === "Inline plain") assert.doesNotMatch(input, /Inline HTML/);
+    } else {
+      assert.match(result.error, /Unable to read this email/);
+      assert.equal(app.requests.length, 0);
+    }
+  }
+});
+
 test("sanitizer failures stop summary rendering rather than returning unsanitized content", () => {
   const app = harness(); app.sandbox.DOMPurify = undefined;
   assert.throws(() => app.sandbox.sanitizeAiContent('<img src=x onerror="alert(1)">'), /displayed safely/);

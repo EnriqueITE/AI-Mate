@@ -175,20 +175,26 @@ async function summarizeTextContent(originalText, userPrompt = "", language = "a
   return sanitized;
 }
 
-function extractPlainTextFromPayload(part) {
+function extractPlainTextFromPayload(part, isMessageRoot = false) {
   if (!part) return "";
   const disposition = part.headers?.["content-disposition"] || [];
   if (part.name || part.filename || String(disposition).toLowerCase().includes("attachment")) return "";
   const mime = (part.mimeType || part.contentType || "").toLowerCase();
-  if (mime.startsWith("message/")) return "";
+  // getFull wraps the selected email in message/rfc822. Nested messages are attachments.
+  if (mime.startsWith("message/") && !(isMessageRoot && mime.split(";")[0].trim() === "message/rfc822")) return "";
   if (typeof part.body === "string" && part.body.length) {
     if (mime.includes("text/plain")) return part.body;
     if (mime.includes("text/html")) return stripHtml(part.body);
   }
   if (Array.isArray(part.parts)) {
     if (mime.startsWith("multipart/alternative")) {
-      const plain = part.parts.find((child) => /^text\/plain(?:;|$)/i.test(child.contentType || child.mimeType || "") && !child.name && !child.filename);
-      if (plain) return extractPlainTextFromPayload(plain);
+      const isPlain = (child) => /^text\/plain(?:;|$)/i.test(child.contentType || child.mimeType || "");
+      const alternatives = [...part.parts.filter(isPlain), ...part.parts.filter((child) => !isPlain(child))];
+      for (const child of alternatives) {
+        const text = extractPlainTextFromPayload(child);
+        if (text.trim()) return text;
+      }
+      return "";
     }
     return part.parts
       .map((child) => extractPlainTextFromPayload(child))
@@ -209,7 +215,7 @@ async function getMessagePlainText(messageId) {
   if (typeof messagesApi.getFull === "function") {
     try {
       const full = await messagesApi.getFull(messageId);
-      const plain = extractPlainTextFromPayload(full?.payload || full);
+      const plain = extractPlainTextFromPayload(full?.payload || full, true);
       if (plain && plain.trim()) {
         return plain;
       }
