@@ -1,3 +1,12 @@
+# Version 1.0.26 — native Thunderbird button checks, November 23, 2026
+
+Thunderbird 160.0 on Windows loaded the release XPI in a fresh, offline profile. Its installed bytes matched `dist/ai-mate-1.0.26.xpi` (SHA-256 `a8743b3786625c639fc7966aee00d79ca46dac672c8daadb849b9f333642ffc6`). Marionette clicked both Thunderbird toolbar buttons and all 18 HTML buttons listed in the archive. The local report is `dist/qa-release-buttons-20261123-181919/report.json`.
+
+- **Reader (3 buttons).** Summarized the selected message in the main reading pane, a separate tab and a standalone window. Checked plain text and the HTML alternative of a multipart message, exclusion of attachment content, copied clipboard text, opening Settings, and recovery after a simulated rate limit. Verified disabled and automatic summaries after changing the corresponding checkboxes in Settings.
+- **Compose (11 buttons).** Exercised every action in HTML and plain-text editors. Checked the inserted reply and improved draft, exact restoration after Undo, summary display and clearing, selection preview, cancellation, regeneration, clipboard contents, replacement and opening Settings.
+- **Settings (4 buttons).** Checked both Show and Hide, restoring model defaults, rejection of an invalid token limit, persistence after saving and reopening, and the result of testing a model with a simulated success and rate limit.
+- **Other checks.** All 151 automated tests, JavaScript syntax checks, the existing native regression suite and package integrity checks passed. The button run used 20 simulated API responses and synthetic messages. Live OpenAI access and Thunderbird versions other than 160.0 were outside this run.
+
 # Version 1.0.25 — isolated Settings layout and compact popup, November 9, 2026
 
 - 150/150 automated tests and JavaScript syntax checks pass. This patch changes presentation and development checks, not AI behavior or saved settings.

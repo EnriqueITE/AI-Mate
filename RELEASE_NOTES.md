@@ -1,4 +1,8 @@
-# AI Mate 1.0.25
+# AI Mate 1.0.26
+
+- Fix “Unable to read this email's content” when summarizing an open message. The reader handles Thunderbird's outer message wrapper and uses the HTML body when the plain-text alternative is empty.
+
+## AI Mate 1.0.25
 
 - Restore Settings to a centered, responsive page with normal document scrolling and an accessible Save button. Scope the toolbar popup's size and scrolling rules to the compose popup only.
 - Fit the standard compose controls on screen with or without a selection: remove empty status gaps, use a slightly shorter resizable instruction field and put tips in an expandable section. Retain the visible support footer.
