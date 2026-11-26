@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171b35">
+  <meta name="description" content="AI Mate para Thunderbird. Redacta respuestas, ajusta fragmentos y resume mensajes con tu propia clave de OpenAI.">
+  <title>AI Mate · Asistente de escritura para Thunderbird</title>
+  <link rel="icon" href="assets/ai-mate.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Ir al contenido</a>
+<header><div class="shell mast">
+  <a class="brand" href="#main"><img src="assets/ai-mate.png" width="32" height="32" alt="">AI Mate</a>
+  <nav aria-label="Navegación principal"><a class="privacy-link" href="#datos">Privacidad</a>
+  <a href="https://github.com/EnriqueITE/AI-Mate">GitHub <span aria-hidden="true">↗</span></a>
+  <div class="langs" aria-label="Idioma" role="group"><a lang="es" data-lang="es" href="index.html" aria-current="page">ES</a><span>/</span><a lang="en" data-lang="en" href="en/index.html">EN</a></div></nav>
+</div></header>
+<main id="main"><section class="hero"><div class="shell spread">
+  <div class="intro"><p class="label"><i></i>Extensión para Thunderbird</p>
+    <h1>AI Mate<span>.</span></h1><h2>El borrador es tuyo.</h2>
+    <p class="lede">Redacta respuestas, afina una frase o resume un correo largo. Trabaja en la ventana de Thunderbird con tu propia clave de OpenAI.</p>
+    <a class="cta" href="https://addons.thunderbird.net/es/thunderbird/addon/ai-mate/">Añadir a Thunderbird <span aria-hidden="true">↗</span></a>
+    <p class="compat">Thunderbird 115+ <span>·</span> Código abierto</p></div>
+  <figure class="specimen"><figcaption><span>Ejemplo de reescritura</span><img src="assets/ai-mate.png" width="34" height="34" alt=""></figcaption>
+    <div class="paper"><div class="subject"><span>Asunto</span><strong>Informe del viernes</strong></div>
+    <div class="mail"><p>Hola, Ana:</p><p class="selection" aria-live="polite"><mark data-example="0">Te escribía para preguntarte si tendrías la posibilidad de enviarme la última versión del informe antes del viernes.</mark><mark data-example="1" hidden>¿Me envías la última versión del informe antes del viernes?</mark><mark data-example="2" hidden>¿Podrías enviarme la última versión del informe antes del viernes?</mark></p><p>Gracias,<br>Álex</p></div></div>
+    <div class="toggle" role="group" aria-label="Estilo del ejemplo" hidden><button type="button" data-style="0" aria-pressed="true">Original</button><button type="button" data-style="1" aria-pressed="false">Más breve</button><button type="button" data-style="2" aria-pressed="false">Formal</button></div></figure>
+</div></section>
+<section class="shell workspace"><div class="heading"><p class="label"><i></i>En el editor</p><h2>De la lectura<br> a la respuesta.</h2></div><div class="features">
+<article><h3>Entender un hilo</h3><p>Activa los resúmenes del lector para extraer las ideas principales del mensaje. Las citas incluidas en el cuerpo aportan el contexto de la conversación.</p></article>
+<article><h3>Empezar un borrador</h3><p>Elige el tono y la extensión de la respuesta. AI Mate inserta una propuesta en la ventana de redacción para que puedas revisarla antes de enviar.</p></article>
+<article><h3>Ajustar un fragmento</h3><p>Selecciona unas líneas, elige un estilo y compara la propuesta. Puedes copiarla, aplicarla a la selección o deshacer el último cambio.</p></article>
+</div></section>
+<section id="datos" class="data"><div class="shell workspace"><div class="heading"><p class="label"><i></i>Privacidad</p><h2>Qué se envía<br> a OpenAI.</h2></div><div class="privacy">
+<p>La clave y las preferencias se guardan en tu perfil de Thunderbird. Cada petición va directamente a la API de OpenAI con tu clave y se rige por las condiciones de tu cuenta.</p>
+<dl><dt>Al reescribir una selección</dt><dd>Se envían el fragmento seleccionado, sus enlaces, el estilo y la instrucción que añadas para esa reescritura.</dd>
+<dt>Al redactar o mejorar una respuesta</dt><dd>La petición incluye el borrador, el texto citado, el contexto de la firma, el asunto, los destinatarios Para/CC y las instrucciones de escritura.</dd></dl>
+<a class="inline" href="https://github.com/EnriqueITE/AI-Mate/blob/main/PRIVACY.md">Política de privacidad del complemento ↗</a></div></div></section>
+</main>
+<footer><div class="shell foot"><a class="author" href="https://enriqueite.github.io/">Enrique Serrano Aparicio ↗</a><a href="https://github.com/EnriqueITE/AI-Mate">Código fuente ↗</a></div></footer>
+</body></html>
