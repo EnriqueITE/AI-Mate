@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171b35">
+  <meta name="description" content="AI Mate for Thunderbird. Draft replies, rewrite selections and summarize messages with your own OpenAI API key.">
+  <title>AI Mate · Writing assistant for Thunderbird</title>
+  <link rel="icon" href="../assets/ai-mate.png">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header><div class="shell mast">
+  <a class="brand" href="#main"><img src="../assets/ai-mate.png" width="32" height="32" alt="">AI Mate</a>
+  <nav aria-label="Main navigation"><a class="privacy-link" href="#datos">Privacy</a>
+  <a href="https://github.com/EnriqueITE/AI-Mate">GitHub <span aria-hidden="true">↗</span></a>
+  <div class="langs" aria-label="Language" role="group"><a lang="es" data-lang="es" href="../index.html">ES</a><span>/</span><a lang="en" data-lang="en" href="../en/index.html" aria-current="page">EN</a></div></nav>
+</div></header>
+<main id="main"><section class="hero"><div class="shell spread">
+  <div class="intro"><p class="label"><i></i>Thunderbird add-on</p>
+    <h1>AI Mate<span>.</span></h1><h2>It’s your draft.</h2>
+    <p class="lede">Draft replies, refine a sentence or summarize a long email. Work inside Thunderbird with your own OpenAI API key.</p>
+    <a class="cta" href="https://addons.thunderbird.net/en-US/thunderbird/addon/ai-mate/">Add to Thunderbird <span aria-hidden="true">↗</span></a>
+    <p class="compat">Thunderbird 115+ <span>·</span> Open source</p></div>
+  <figure class="specimen"><figcaption><span>Sample rewrite</span><img src="../assets/ai-mate.png" width="34" height="34" alt=""></figcaption>
+    <div class="paper"><div class="subject"><span>Subject</span><strong>Friday’s report</strong></div>
+    <div class="mail"><p>Hi Ana,</p><p class="selection" aria-live="polite"><mark data-example="0">I was writing to see if you might be able to send me the latest version of the report before Friday.</mark><mark data-example="1" hidden>Could you send the latest report before Friday?</mark><mark data-example="2" hidden>Would you be able to send me the latest version of the report before Friday?</mark></p><p>Thanks,<br>Alex</p></div></div>
+    <div class="toggle" role="group" aria-label="Sample style" hidden><button type="button" data-style="0" aria-pressed="true">Original</button><button type="button" data-style="1" aria-pressed="false">Shorter</button><button type="button" data-style="2" aria-pressed="false">Formal</button></div></figure>
+</div></section>
+<section class="shell workspace"><div class="heading"><p class="label"><i></i>In the editor</p><h2>From reading<br> to replying.</h2></div><div class="features">
+<article><h3>Catch up on a thread</h3><p>Enable reader summaries to get the main points of a message. Quotes contained in the body provide context from earlier in the conversation.</p></article>
+<article><h3>Start a reply</h3><p>Choose the tone and length of a reply. AI Mate inserts a draft into the compose window for you to review before sending.</p></article>
+<article><h3>Refine one passage</h3><p>Select a few lines, choose a style and review the suggestion. Copy it, apply it to the selection or undo the last change.</p></article>
+</div></section>
+<section id="datos" class="data"><div class="shell workspace"><div class="heading"><p class="label"><i></i>Privacy</p><h2>What goes<br> to OpenAI.</h2></div><div class="privacy">
+<p>Your key and preferences are stored in your Thunderbird profile. Each request goes directly to the OpenAI API with your key and is subject to your account’s terms.</p>
+<dl><dt>When rewriting a selection</dt><dd>The selected passage, its link destinations, the style and any instructions for that rewrite are sent.</dd>
+<dt>When drafting or improving a reply</dt><dd>The request includes draft text, quoted text, signature context, subject, To/Cc recipients and writing instructions.</dd></dl>
+<a class="inline" href="https://github.com/EnriqueITE/AI-Mate/blob/main/PRIVACY.md">Read the add-on privacy policy ↗</a></div></div></section>
+</main>
+<footer><div class="shell foot"><a class="author" href="https://enriqueite.github.io/">Enrique Serrano Aparicio ↗</a><a href="https://github.com/EnriqueITE/AI-Mate">Source code ↗</a></div></footer>
+</body></html>
